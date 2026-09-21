@@ -12,6 +12,24 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
 
 ![Preview](preview.png)
 
+## Recursos
+
+- **Cidade neon 3D** com prédios de janelas iluminadas, postes, estrelas,
+  névoa e **bloom** (pós-processamento) com tone mapping cinematográfico
+- **Garagem com 3 carros** — NEON (equilibrado), PHANTOM (veloz, traseira
+  solta) e TANK (firme) — cada um com cor e dirigibilidade próprias
+- **Nitro (Shift)** com barra de recarga, chamas no escapamento e FOV dinâmico
+- **Trânsito com colisão**: carros circulam pelas avenidas e te atrapalham
+- **Rampas com física de pulo**: decole, voe e aterrisse com fumaça
+- **Som procedural** (WebAudio, sem arquivos): motor que responde à
+  velocidade, cantada de pneu na derrapagem e mute com `M`
+- **Marcas de derrapagem**, fumaça nos pneus e shake de câmera
+- **Missão e cronômetro**: explore os 13 projetos, veja seu tempo e o recorde
+  salvo no navegador
+- **Minimapa** em tempo real com praças, rampas, trânsito e sua posição
+- **HUD** com velocidade, nitro, progresso e painel do repositório
+- **Controles de toque** para celular
+
 ## Como jogar
 
 | Ação | Tecla |
@@ -20,10 +38,12 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
 | Ré / frear | `S` / `↓` |
 | Virar | `A` `D` / `←` `→` |
 | Freio de mão | `Espaço` |
+| Nitro | `Shift` |
 | Abrir o repositório | `E` |
+| Ligar/desligar som | `M` |
 
 No celular aparecem botões na tela. O contador no topo mostra quantos
-repositórios você já visitou.
+repositórios você já visitou — complete os 13 para fechar a missão.
 
 ## Jogar online
 
@@ -31,7 +51,9 @@ https://francoscorporation.github.io/repo-racer/
 
 ## Stack
 
-- **Three.js** (r160, via CDN) — cena, luzes, câmera, sprites e colisões
+- **Three.js** (r160, via CDN) — cena, luzes com sombras, reflexos (IBL),
+  sprites, pós-processamento (bloom)
+- **WebAudio** — som do motor e dos pneus gerado em tempo real
 - **HTML/CSS/JS puro** — sem build, sem dependências instaladas
 - **GitHub Pages** — hospedagem estática
 
@@ -45,7 +67,7 @@ python3 -m http.server 8080
 ## Estrutura
 
 ```
-index.html   # o jogo inteiro (cena, física arcade, HUD, controles)
+index.html   # o jogo inteiro (cena, física arcade, áudio, HUD, controles)
 preview.png  # screenshot usado no README
 ```
 
