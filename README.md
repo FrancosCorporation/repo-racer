@@ -1,5 +1,25 @@
 # Repo Racer
 
+## 🐳 Instalação e Execução (Docker) — recomendado
+
+### Pré-requisitos
+- [Docker](https://docs.docker.com/get-docker/) + Docker Compose
+
+### Rodar com Docker
+```bash
+docker compose up --build
+```
+Para servir via container:
+```bash
+docker run --rm -p 8080:80 -v $(pwd):/usr/share/nginx/html:ro nginx:alpine
+```
+
+### Sem Docker (local)
+```bash
+# abre o index.html no navegador
+open index.html
+```
+
 Jogo 3D no navegador em que você dirige por uma cidade neon e **explora os
 repositórios** da FrancosCorporation: cada praça iluminada é um projeto — pare
 em cima, veja a descrição e pressione **E** para abrir no GitHub.
