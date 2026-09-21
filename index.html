@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Repo Racer — FrancosCorporation</title>
+<style>
+  :root {
+    --cyan: #00e5ff;
+    --magenta: #ff2d95;
+    --green: #39ff88;
+    --bg: #050510;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--bg); }
+  canvas { display: block; }
+  body {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    color: #eaf6ff;
+    -webkit-user-select: none; user-select: none;
+  }
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  .box {
+    position: absolute;
+    background: rgba(5, 8, 20, 0.72);
+    border: 1px solid rgba(0, 229, 255, 0.35);
+    border-radius: 10px;
+    padding: 10px 14px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 0 24px rgba(0, 229, 255, 0.12);
+  }
+  #title { top: 14px; left: 14px; }
+  #title h1 { margin: 0 0 4px; font-size: 16px; letter-spacing: 2px; color: var(--cyan); text-shadow: 0 0 12px rgba(0,229,255,.7); }
+  #title p { margin: 2px 0; font-size: 12px; color: #9fb8cc; }
+  #title b { color: #fff; }
+  #stats { top: 14px; right: 14px; text-align: right; font-size: 13px; }
+  #stats .big { font-size: 20px; color: var(--green); text-shadow: 0 0 12px rgba(57,255,136,.6); }
+  #stats .speed { color: var(--cyan); font-size: 18px; }
+  #pad {
+    left: 50%; bottom: 26px; transform: translateX(-50%);
+    min-width: 320px; max-width: 92vw; text-align: center;
+    opacity: 0; transition: opacity .18s ease;
+  }
+  #pad.show { opacity: 1; }
+  #pad h2 { margin: 0 0 4px; font-size: 17px; color: var(--cyan); text-shadow: 0 0 12px rgba(0,229,255,.6); }
+  #pad p { margin: 0 0 8px; font-size: 12px; color: #cfe6f5; }
+  #pad .key {
+    display: inline-block; padding: 2px 8px; margin-right: 6px;
+    border: 1px solid var(--green); border-radius: 6px; color: var(--green); font-size: 12px;
+  }
+  #pad a { color: var(--green); font-size: 12px; pointer-events: auto; }
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px; background: var(--bg); z-index: 30; transition: opacity .5s ease;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+  #loading .logo { font-size: 26px; letter-spacing: 6px; color: var(--cyan); text-shadow: 0 0 20px rgba(0,229,255,.8); }
+  #loading .sub { font-size: 12px; color: #7f97ab; }
+  #touch { position: fixed; inset: auto 0 0 0; height: 0; z-index: 20; }
+  .tbtn {
+    position: fixed; bottom: 22px; width: 64px; height: 64px; border-radius: 50%;
+    border: 1px solid rgba(0,229,255,.5); background: rgba(5,8,20,.65); color: var(--cyan);
+    font-size: 22px; display: none; align-items: center; justify-content: center;
+    pointer-events: auto; touch-action: none;
+  }
+  .tbtn:active { background: rgba(0,229,255,.2); }
+  #t-left { left: 18px; }
+  #t-right { left: 96px; }
+  #t-gas { right: 18px; }
+  #t-brake { right: 96px; }
+  @media (pointer: coarse) { .tbtn { display: flex; } }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div id="title" class="box">
+    <h1>REPO RACER</h1>
+    <p>Dirija e explore os repositorios da <b>FrancosCorporation</b>.</p>
+    <p><b>WASD</b> / setas para dirigir &nbsp; <b>Espaco</b> freia &nbsp; <b>E</b> abre o repo</p>
+  </div>
+  <div id="stats" class="box">
+    <div>EXPLORADOS <span class="big" id="visited">0</span>/<span id="total">0</span></div>
+    <div class="speed"><span id="speed">0</span> km/h</div>
+  </div>
+  <div id="pad" class="box">
+    <h2 id="pad-name"></h2>
+    <p id="pad-desc"></p>
+    <span class="key">E</span> abrir no GitHub
+  </div>
+</div>
+<div id="touch">
+  <div class="tbtn" id="t-left">&#9664;</div>
+  <div class="tbtn" id="t-right">&#9654;</div>
+  <div class="tbtn" id="t-gas">&#9650;</div>
+  <div class="tbtn" id="t-brake">&#9660;</div>
+</div>
+<div id="loading">
+  <div class="logo">REPO RACER</div>
+  <div class="sub">carregando a cidade...</div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const REPOS = [
+  { name: 'brightness-control', desc: 'Controle de brilho de monitores no Linux (DDC/CI + xrandr) com GTK3', url: 'https://github.com/FrancosCorporation/brightness-control', color: 0x00e5ff },
+  { name: 'ds4linux', desc: 'Emulador de DualShock 4 para Linux com editor de perfis', url: 'https://github.com/FrancosCorporation/ds4linux', color: 0x39ff88 },
+  { name: 'FrancosVox', desc: 'Ditado por voz pt-BR no Linux com GPU Vulkan e OSD', url: 'https://github.com/FrancosCorporation/FrancosVox', color: 0xff2d95 },
+  { name: 'condominio_api', desc: 'API REST multi-tenant de gestao condominial (.NET + MongoDB)', url: 'https://github.com/FrancosCorporation/condominio_api', color: 0xffb300 },
+  { name: 'api_mongodb_query_money', desc: 'API Spring Boot + MongoDB para dados da B3', url: 'https://github.com/FrancosCorporation/api_mongodb_query_money', color: 0x7c4dff },
+  { name: 'api_django_vendas', desc: 'API de vendas em Django com token e reCAPTCHA', url: 'https://github.com/FrancosCorporation/api_django_vendas', color: 0x00b894 },
+  { name: 'api_nest_run_container', desc: 'API NestJS pronta para rodar em container Docker', url: 'https://github.com/FrancosCorporation/api_nest_run_container', color: 0xe0234e },
+  { name: 'analisador_csv', desc: 'Analisador de CSV para Data Science em Java (projeto integrador)', url: 'https://github.com/FrancosCorporation/projeto_integrador_analisador_csv', color: 0x4dd0e1 },
+  { name: 'doben_eccomerce', desc: 'Vitrine de e-commerce em Next.js 13 + TypeScript', url: 'https://github.com/FrancosCorporation/doben_eccomerce_store', color: 0xf7df1e },
+  { name: 'recruiters-example', desc: 'Aplicacao full stack de exemplo para recrutadores', url: 'https://github.com/FrancosCorporation/recruiters-apllication-example', color: 0xff7043 },
+  { name: 'jogo_da_velha_ia', desc: 'Jogo da velha com IA em Java', url: 'https://github.com/FrancosCorporation/jogo_da_velha_ia', color: 0x9ccc65 },
+  { name: 'chat_criptografado', desc: 'Chat P2P com criptografia em Java', url: 'https://github.com/FrancosCorporation/chat_criptografado', color: 0xba68c8 },
+  { name: 'PERFIL', desc: 'Todos os projetos, curriculo e contato', url: 'https://github.com/FrancosCorporation', color: 0xffffff }
+];
+
+const PAD_POS = [
+  [-18, -14], [0, -24], [18, -14], [24, 6], [14, 22], [-8, 26],
+  [-24, 14], [-28, -6], [-12, -30], [10, -34], [32, -20], [-34, 22], [0, 0]
+];
+
+let seed = 20260921;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050510);
+scene.fog = new THREE.FogExp2(0x050510, 0.012);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 600);
+camera.position.set(0, 8, -16);
+
+scene.add(new THREE.HemisphereLight(0x88aaff, 0x080820, 1.0));
+const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+sun.position.set(40, 80, 30);
+scene.add(sun);
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(500, 500),
+  new THREE.MeshStandardMaterial({ color: 0x05060a, roughness: 0.95, metalness: 0.05 })
+);
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(500, 100, 0x1e6f9f, 0x0b2030);
+grid.position.y = 0.02;
+scene.add(grid);
+
+const starGeo = new THREE.BufferGeometry();
+const starPos = [];
+for (let i = 0; i < 900; i++) {
+  const a = rand() * Math.PI * 2, r = 120 + rand() * 200, y = 30 + rand() * 160;
+  starPos.push(Math.cos(a) * r, y, Math.sin(a) * r);
+}
+starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0x9fd8ff, size: 0.8, sizeAttenuation: true })));
+
+const buildings = [];
+function addBuilding(x, z, w, d, h, color) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x0b1220, roughness: 0.85, metalness: 0.15,
+    emissive: new THREE.Color(color), emissiveIntensity: 0.16
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, h / 2, z);
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geo),
+    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.55 })
+  );
+  mesh.add(edges);
+  scene.add(mesh);
+  buildings.push({ x, z, w, d });
+}
+for (let i = 0; i < 78; i++) {
+  const a = rand() * Math.PI * 2;
+  const r = 48 + rand() * 70;
+  const w = 5 + rand() * 10, d = 5 + rand() * 10, h = 6 + rand() * 38;
+  const palette = [0x1e6f9f, 0x00e5ff, 0xff2d95, 0x7c4dff, 0x39ff88];
+  addBuilding(Math.cos(a) * r, Math.sin(a) * r, w, d, h, palette[Math.floor(rand() * palette.length)]);
+}
+
+for (let i = -4; i <= 4; i++) {
+  for (const side of [-1, 1]) {
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.12, 7, 6),
+      new THREE.MeshStandardMaterial({ color: 0x223344, emissive: 0x112233 })
+    );
+    pole.position.set(i * 22 + 11, 3.5, side * 34);
+    scene.add(pole);
+    const lamp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.45, 10, 10),
+      new THREE.MeshStandardMaterial({ color: 0xfff2cc, emissive: 0xffd27a, emissiveIntensity: 2.2 })
+    );
+    lamp.position.set(pole.position.x, 7.2, pole.position.z);
+    scene.add(lamp);
+  }
+}
+
+function makeLabel(text, colorHex) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 640; canvas.height = 160;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 640, 160);
+  ctx.font = 'bold 58px Consolas, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = colorHex;
+  ctx.shadowBlur = 26;
+  ctx.fillStyle = '#f2fbff';
+  ctx.fillText(text, 320, 80);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 4;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sprite.scale.set(11, 2.75, 1);
+  return sprite;
+}
+
+const pads = [];
+REPOS.forEach((repo, i) => {
+  const [x, z] = PAD_POS[i];
+  const color = new THREE.Color(repo.color);
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+
+  const disc = new THREE.Mesh(
+    new THREE.CylinderGeometry(5, 5, 0.25, 40),
+    new THREE.MeshStandardMaterial({ color: 0x0a1424, roughness: 0.6, metalness: 0.3, emissive: repo.color, emissiveIntensity: 0.18 })
+  );
+  disc.position.y = 0.13;
+  group.add(disc);
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(5, 0.09, 10, 64),
+    new THREE.MeshStandardMaterial({ color: repo.color, emissive: repo.color, emissiveIntensity: 2.4 })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.3;
+  group.add(ring);
+
+  const beacon = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.12, 34, 8),
+    new THREE.MeshBasicMaterial({ color: repo.color, transparent: true, opacity: 0.14 })
+  );
+  beacon.position.y = 17;
+  group.add(beacon);
+
+  const label = makeLabel(repo.name, '#' + color.getHexString());
+  label.position.y = 7.2;
+  group.add(label);
+
+  scene.add(group);
+  pads.push({ i, x, z, ring, group, repo, visited: false });
+});
+
+const car = new THREE.Group();
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0x00e5ff, roughness: 0.35, metalness: 0.7, emissive: 0x004455, emissiveIntensity: 0.8 });
+const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.55, 3.8), bodyMat);
+body.position.y = 0.62;
+car.add(body);
+
+const cabin = new THREE.Mesh(
+  new THREE.BoxGeometry(1.45, 0.5, 1.7),
+  new THREE.MeshStandardMaterial({ color: 0x0a1020, roughness: 0.2, metalness: 0.6, emissive: 0x1a3350, emissiveIntensity: 0.7 })
+);
+cabin.position.set(0, 1.12, -0.25);
+car.add(cabin);
+
+const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.32, 14);
+const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111418, roughness: 0.9, metalness: 0.2 });
+const wheels = [];
+[[-0.98, 1.2, true], [0.98, 1.2, true], [-0.98, -1.2, false], [0.98, -1.2, false]].forEach(([wx, wz, front]) => {
+  const pivot = new THREE.Group();
+  pivot.position.set(wx, 0.36, wz);
+  const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+  wheel.rotation.z = Math.PI / 2;
+  pivot.add(wheel);
+  car.add(pivot);
+  wheels.push({ pivot, wheel, front });
+});
+
+const headMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 3 });
+for (const hx of [-0.6, 0.6]) {
+  const light = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.1), headMat);
+  light.position.set(hx, 0.66, 1.92);
+  car.add(light);
+}
+const tailMat = new THREE.MeshStandardMaterial({ color: 0xff2d55, emissive: 0xff2d55, emissiveIntensity: 2.6 });
+for (const hx of [-0.6, 0.6]) {
+  const light = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.1), tailMat);
+  light.position.set(hx, 0.66, -1.92);
+  car.add(light);
+}
+
+const glow = new THREE.PointLight(0x00e5ff, 2.2, 12, 2);
+glow.position.y = 0.25;
+car.add(glow);
+scene.add(car);
+
+const state = { speed: 0, heading: Math.PI, steer: 0 };
+car.position.set(0, 0, 14);
+car.rotation.y = Math.PI;
+
+const shotMode = new URLSearchParams(location.search).has('shot');
+if (shotMode) {
+  car.position.set(0, 0, 16);
+  state.heading = Math.PI;
+  car.rotation.y = Math.PI;
+  camera.position.set(0, 11, 36);
+  camera.lookAt(0, 0.5, 0);
+}
+const MAX_SPEED = 30, MAX_REVERSE = -9, ACCEL = 26, BRAKE = 46, FRICTION = 9;
+const keys = { up: false, down: false, left: false, right: false };
+
+window.addEventListener('keydown', (e) => {
+  if (['ArrowUp', 'w', 'W'].includes(e.key)) keys.up = true;
+  if (['ArrowDown', 's', 'S'].includes(e.key)) keys.down = true;
+  if (['ArrowLeft', 'a', 'A'].includes(e.key)) keys.left = true;
+  if (['ArrowRight', 'd', 'D'].includes(e.key)) keys.right = true;
+  if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') openActive();
+  if ([' ', 'ArrowUp', 'ArrowDown'].includes(e.key)) e.preventDefault();
+});
+window.addEventListener('keyup', (e) => {
+  if (['ArrowUp', 'w', 'W'].includes(e.key)) keys.up = false;
+  if (['ArrowDown', 's', 'S'].includes(e.key)) keys.down = false;
+  if (['ArrowLeft', 'a', 'A'].includes(e.key)) keys.left = false;
+  if (['ArrowRight', 'd', 'D'].includes(e.key)) keys.right = false;
+});
+
+function bindTouch(id, key) {
+  const el = document.getElementById(id);
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); keys[key] = true; });
+  el.addEventListener('pointerup', (e) => { e.preventDefault(); keys[key] = false; });
+  el.addEventListener('pointercancel', () => { keys[key] = false; });
+  el.addEventListener('pointerleave', () => { keys[key] = false; });
+}
+bindTouch('t-left', 'left');
+bindTouch('t-right', 'right');
+bindTouch('t-gas', 'up');
+bindTouch('t-brake', 'down');
+
+const visitedEl = document.getElementById('visited');
+const totalEl = document.getElementById('total');
+const speedEl = document.getElementById('speed');
+const padPanel = document.getElementById('pad');
+const padName = document.getElementById('pad-name');
+const padDesc = document.getElementById('pad-desc');
+totalEl.textContent = String(REPOS.length);
+
+let activePad = null;
+let visitedCount = 0;
+
+function openActive() {
+  if (activePad && activePad.repo.url) window.open(activePad.repo.url, '_blank', 'noopener');
+}
+
+const clock = new THREE.Clock();
+const camOffset = new THREE.Vector3(0, 7, -14);
+const tmpVec = new THREE.Vector3();
+
+function update(dt) {
+  if (keys.up) state.speed += ACCEL * dt;
+  else if (keys.down) state.speed -= BRAKE * dt;
+  else state.speed *= Math.exp(-FRICTION * dt);
+  state.speed = Math.max(MAX_REVERSE, Math.min(MAX_SPEED, state.speed));
+
+  const steerInput = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+  const speedFactor = Math.min(1, Math.abs(state.speed) / 14);
+  state.steer += (steerInput * speedFactor - state.steer) * Math.min(1, dt * 8);
+  state.heading += state.steer * 2.1 * dt * Math.sign(state.speed || 1);
+
+  car.position.x += Math.sin(state.heading) * state.speed * dt;
+  car.position.z += Math.cos(state.heading) * state.speed * dt;
+  car.rotation.y = state.heading;
+
+  const bound = 120;
+  if (Math.abs(car.position.x) > bound) { car.position.x = Math.sign(car.position.x) * bound; state.speed *= 0.3; }
+  if (Math.abs(car.position.z) > bound) { car.position.z = Math.sign(car.position.z) * bound; state.speed *= 0.3; }
+
+  for (const b of buildings) {
+    const dx = car.position.x - b.x, dz = car.position.z - b.z;
+    const px = (b.w / 2 + 1.3) - Math.abs(dx);
+    const pz = (b.d / 2 + 1.3) - Math.abs(dz);
+    if (px > 0 && pz > 0) {
+      if (px < pz) car.position.x = b.x + Math.sign(dx || 1) * (b.w / 2 + 1.3);
+      else car.position.z = b.z + Math.sign(dz || 1) * (b.d / 2 + 1.3);
+      state.speed *= 0.35;
+    }
+  }
+
+  for (const w of wheels) {
+    w.wheel.rotation.x += state.speed * dt * 2.6;
+    if (w.front) w.pivot.rotation.y = state.steer * 0.5;
+  }
+
+  let nearest = null, nearestDist = 5.2;
+  for (const p of pads) {
+    const d = Math.hypot(car.position.x - p.x, car.position.z - p.z);
+    p.ring.scale.setScalar(1 + Math.sin(performance.now() * 0.003 + p.i) * 0.03);
+    if (d < nearestDist) { nearest = p; nearestDist = d; }
+  }
+  if (nearest !== activePad) {
+    activePad = nearest;
+    if (activePad) {
+      padName.textContent = activePad.repo.name;
+      padDesc.textContent = activePad.repo.desc;
+      padPanel.classList.add('show');
+      if (!activePad.visited) {
+        activePad.visited = true;
+        visitedCount++;
+        visitedEl.textContent = String(visitedCount);
+        activePad.ring.material.color.set(0x39ff88);
+        activePad.ring.material.emissive.set(0x39ff88);
+      }
+    } else {
+      padPanel.classList.remove('show');
+    }
+  }
+
+  tmpVec.copy(camOffset).applyAxisAngle(new THREE.Vector3(0, 1, 0), state.heading).add(car.position);
+  if (!shotMode) {
+    camera.position.lerp(tmpVec, 1 - Math.pow(0.0015, dt));
+    camera.lookAt(
+      car.position.x + Math.sin(state.heading) * 7,
+      1.6,
+      car.position.z + Math.cos(state.heading) * 7
+    );
+  }
+
+  speedEl.textContent = String(Math.round(Math.abs(state.speed) * 3.6));
+}
+
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  update(dt);
+  renderer.render(scene, camera);
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+setTimeout(() => document.getElementById('loading').classList.add('hide'), 600);
+</script>
+</body>
+</html>
