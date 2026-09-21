@@ -28,7 +28,9 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
   salvo no navegador
 - **Minimapa** em tempo real com praças, rampas, trânsito e sua posição
 - **HUD** com velocidade, nitro, progresso e painel do repositório
-- **Controles de toque** para celular
+- **Controles de toque** para celular e **suporte a gamepad** (analógico + botões)
+- **Qualidade adaptativa**: detecta mobile/GPU fraca e reduz sombras/pixel ratio (sem SMAA)
+- **Timestep fixo** de física (60 Hz) e limpeza de recursos ao sair
 
 ## Como jogar
 
@@ -41,6 +43,7 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
 | Nitro | `Shift` |
 | Abrir o repositório | `E` |
 | Ligar/desligar som | `M` |
+| Gamepad | analógico + botões (A = acelerar, B = frear, R1 = nitro) |
 
 No celular aparecem botões na tela. O contador no topo mostra quantos
 repositórios você já visitou — complete os 13 para fechar a missão.
