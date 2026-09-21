@@ -640,9 +640,10 @@ function addSkid(x, z, heading) {
 const audio = { ctx: null, muted: false, engine: null, screech: null };
 function initAudio() {
   if (audio.ctx) return;
-  const Ctx = window.AudioContext || window.webkitAudioContext;
-  if (!Ctx) return;
-  const ctx = new Ctx();
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
   audio.ctx = ctx;
   const osc1 = ctx.createOscillator();
   osc1.type = 'sawtooth';
@@ -678,6 +679,9 @@ function initAudio() {
   sGain.connect(ctx.destination);
   src.start();
   audio.screech = { src, bp, gain: sGain };
+  } catch (e) {
+    audio.ctx = null;
+  }
 }
 function updateAudio(dt, drifting) {
   if (!audio.ctx) return;
