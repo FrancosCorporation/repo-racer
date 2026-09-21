@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>Repo Racer — FrancosCorporation</title>
 <style>
-  :root { --cyan: #00e5ff; --magenta: #ff2d95; --green: #39ff88; --bg: #04060f; }
+  :root { --cyan: #00e5ff; --magenta: #ff2d95; --green: #39ff88; --bg: #04060f; --tbtn: clamp(58px, 9vw, 84px); }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--bg); }
   canvas { display: block; }
@@ -78,17 +78,17 @@
     border: 1px solid var(--cyan); background: transparent; color: var(--cyan); font-size: 14px; text-decoration: none;
   }
   .tbtn {
-    position: fixed; bottom: 22px; width: 64px; height: 64px; border-radius: 50%;
+    position: fixed; bottom: 22px; width: var(--tbtn); height: var(--tbtn); border-radius: 50%;
     border: 1px solid rgba(0,229,255,.5); background: rgba(4,7,18,.6); color: var(--cyan);
-    font-size: 22px; display: none; align-items: center; justify-content: center;
+    font-size: clamp(18px, 2.4vw, 26px); display: none; align-items: center; justify-content: center;
     pointer-events: auto; touch-action: none; z-index: 20;
   }
   .tbtn:active { background: rgba(0,229,255,.2); }
   #t-left { left: 18px; }
-  #t-right { left: 96px; }
+  #t-right { left: calc(18px + var(--tbtn) + 14px); }
   #t-gas { right: 18px; }
-  #t-brake { right: 96px; }
-  #t-nitro { right: 174px; font-size: 15px; letter-spacing: 1px; }
+  #t-brake { right: calc(18px + var(--tbtn) + 14px); }
+  #t-nitro { right: calc(18px + 2 * (var(--tbtn) + 14px)); font-size: clamp(13px, 1.8vw, 18px); letter-spacing: 1px; }
   @media (pointer: coarse) { .tbtn { display: flex; } #minimap { top: auto; bottom: 170px; } }
 </style>
 </head>
@@ -189,9 +189,10 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 const params = new URLSearchParams(location.search);
 const shotMode = params.has('shot');
+const LOW_END = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.matchMedia('(pointer: coarse)').matches || (navigator.hardwareConcurrency || 4) <= 4;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, LOW_END ? 1.25 : 1.8));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -209,18 +210,23 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
 
 scene.add(new THREE.HemisphereLight(0x88aaff, 0x080820, 0.7));
+const SHADOW_HALF = 70;
 const sun = new THREE.DirectionalLight(0xffffff, 1.7);
 sun.position.set(80, 120, 60);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.near = 1;
+sun.shadow.mapSize.set(LOW_END ? 1024 : 2048, LOW_END ? 1024 : 2048);
+sun.shadow.camera.near = 10;
 sun.shadow.camera.far = 420;
+sun.shadow.camera.left = -SHADOW_HALF;
+sun.shadow.camera.right = SHADOW_HALF;
+sun.shadow.camera.top = SHADOW_HALF;
+sun.shadow.camera.bottom = -SHADOW_HALF;
+sun.shadow.camera.updateProjectionMatrix();
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.02;
 sun.target.position.set(0, 0, 0);
 scene.add(sun);
 scene.add(sun.target);
-const SHADOW_HALF = 70;
 
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide,
@@ -395,7 +401,7 @@ function addBuilding(x, z, w, d, h) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   scene.add(mesh);
-  buildings.push({ x, z, w, d });
+  buildings.push({ x, z, w, d, h });
 }
 const BLOCKS = [];
 for (const bx of [-120, -40, 40, 120]) {
@@ -727,6 +733,7 @@ function makeTrafficCar(color) {
   group.add(bodyMesh);
   const cab = new THREE.Mesh(new RoundedBoxGeometry(1.4, 0.5, 1.7, 3, 0.16), glass);
   cab.position.set(0, 1.12, -0.1);
+  cab.castShadow = true;
   group.add(cab);
   for (const hx of [-0.55, 0.55]) {
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.08), headMat);
@@ -858,7 +865,7 @@ function updateAudio(dt, drifting) {
   audio.screech.gain.gain.value += (screechTarget - audio.screech.gain.gain.value) * Math.min(1, dt * 8);
 }
 
-const state = { speed: 0, heading: 0, steer: 0, pitch: 0, y: 0, vy: 0, airborne: false, nitro: 1, boosting: false, started: false, startTime: 0, finished: false };
+const state = { speed: 0, heading: 0, steer: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, nitro: 1, boosting: false, started: false, startTime: 0, finished: false };
 const stats = { accel: 1, max: 34, grip: 1 };
 car.position.set(0, 0, -34);
 car.rotation.y = 0;
@@ -885,6 +892,28 @@ if (shotMode) {
 
 const MAX_REVERSE = -9, BRAKE = 50, FRICTION = 9;
 const keys = { up: false, down: false, left: false, right: false, nitro: false };
+const pad = { up: false, down: false, left: false, right: false, nitro: false, open: false, prevOpen: false };
+
+function pollGamepad() {
+  if (!navigator.getGamepads) return;
+  const gp = Array.from(navigator.getGamepads()).find(Boolean);
+  if (!gp) {
+    pad.up = pad.down = pad.left = pad.right = pad.nitro = false;
+    return;
+  }
+  const ax = gp.axes[0] || 0;
+  pad.left = ax < -0.3 || (gp.buttons[14] && gp.buttons[14].pressed);
+  pad.right = ax > 0.3 || (gp.buttons[15] && gp.buttons[15].pressed);
+  pad.up = (gp.buttons[7] && gp.buttons[7].pressed) || (gp.buttons[0] && gp.buttons[0].pressed);
+  pad.down = (gp.buttons[6] && gp.buttons[6].pressed) || (gp.buttons[1] && gp.buttons[1].pressed);
+  pad.nitro = (gp.buttons[5] && gp.buttons[5].pressed) || (gp.buttons[2] && gp.buttons[2].pressed);
+  pad.open = (gp.buttons[3] && gp.buttons[3].pressed) || (gp.buttons[9] && gp.buttons[9].pressed);
+  if (pad.open && !pad.prevOpen) {
+    if (!state.started) startGame();
+    else openActive();
+  }
+  pad.prevOpen = pad.open;
+}
 
 let selectedCar = 0;
 const garageEl = document.getElementById('garage');
@@ -978,38 +1007,44 @@ function openActive() {
 const minimap = document.getElementById('minimap');
 const mm = minimap.getContext('2d');
 const MM_SIZE = 180, MM_WORLD = 260;
-function drawMinimap() {
-  const s = MM_SIZE / (MM_WORLD * 2);
-  const toX = (x) => MM_SIZE / 2 + x * s;
-  const toY = (z) => MM_SIZE / 2 + z * s;
-  mm.clearRect(0, 0, MM_SIZE, MM_SIZE);
-  mm.fillStyle = 'rgba(4, 7, 18, 0.72)';
-  mm.fillRect(0, 0, MM_SIZE, MM_SIZE);
-  mm.strokeStyle = 'rgba(0, 229, 255, 0.25)';
-  mm.lineWidth = 1;
-  mm.strokeRect(0.5, 0.5, MM_SIZE - 1, MM_SIZE - 1);
-  mm.strokeStyle = 'rgba(120, 150, 190, 0.3)';
+const mmStatic = document.createElement('canvas');
+mmStatic.width = mmStatic.height = MM_SIZE;
+const mmS = mmStatic.getContext('2d');
+const mmScale = MM_SIZE / (MM_WORLD * 2);
+const mmX = (x) => MM_SIZE / 2 + x * mmScale;
+const mmY = (z) => MM_SIZE / 2 + z * mmScale;
+function buildMinimapStatic() {
+  mmS.clearRect(0, 0, MM_SIZE, MM_SIZE);
+  mmS.fillStyle = 'rgba(4, 7, 18, 0.72)';
+  mmS.fillRect(0, 0, MM_SIZE, MM_SIZE);
+  mmS.strokeStyle = 'rgba(0, 229, 255, 0.25)';
+  mmS.lineWidth = 1;
+  mmS.strokeRect(0.5, 0.5, MM_SIZE - 1, MM_SIZE - 1);
+  mmS.strokeStyle = 'rgba(120, 150, 190, 0.3)';
   for (const r of ROADS) {
-    mm.beginPath(); mm.moveTo(toX(r), 0); mm.lineTo(toX(r), MM_SIZE); mm.stroke();
-    mm.beginPath(); mm.moveTo(0, toY(r)); mm.lineTo(MM_SIZE, toY(r)); mm.stroke();
+    mmS.beginPath(); mmS.moveTo(mmX(r), 0); mmS.lineTo(mmX(r), MM_SIZE); mmS.stroke();
+    mmS.beginPath(); mmS.moveTo(0, mmY(r)); mmS.lineTo(MM_SIZE, mmY(r)); mmS.stroke();
   }
-  for (const r of ramps) {
-    mm.fillStyle = 'rgba(0, 229, 255, 0.5)';
-    mm.fillRect(toX(r.x) - 3, toY(r.z) - 3, 6, 6);
-  }
+  mmS.fillStyle = 'rgba(0, 229, 255, 0.5)';
+  for (const r of ramps) mmS.fillRect(mmX(r.x) - 3, mmY(r.z) - 3, 6, 6);
+}
+buildMinimapStatic();
+function drawMinimap() {
+  mm.clearRect(0, 0, MM_SIZE, MM_SIZE);
+  mm.drawImage(mmStatic, 0, 0);
   for (const p of pads) {
     if (Math.abs(p.x) > MM_WORLD || Math.abs(p.z) > MM_WORLD) continue;
     mm.beginPath();
-    mm.arc(toX(p.x), toY(p.z), 4, 0, Math.PI * 2);
+    mm.arc(mmX(p.x), mmY(p.z), 4, 0, Math.PI * 2);
     mm.fillStyle = p.visited ? '#39ff88' : '#' + new THREE.Color(p.repo.color).getHexString();
     mm.fill();
   }
   for (const t of traffic) {
     mm.fillStyle = 'rgba(255,255,255,0.4)';
-    mm.fillRect(toX(t.mesh.position.x) - 1.5, toY(t.mesh.position.z) - 1.5, 3, 3);
+    mm.fillRect(mmX(t.mesh.position.x) - 1.5, mmY(t.mesh.position.z) - 1.5, 3, 3);
   }
   mm.save();
-  mm.translate(toX(car.position.x), toY(car.position.z));
+  mm.translate(mmX(car.position.x), mmY(car.position.z));
   mm.rotate(Math.PI - state.heading);
   mm.beginPath();
   mm.moveTo(0, -7); mm.lineTo(5, 6); mm.lineTo(-5, 6);
@@ -1026,8 +1061,8 @@ composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.6, 0.55, 0.8);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
-const smaa = new SMAAPass(window.innerWidth, window.innerHeight);
-composer.addPass(smaa);
+const smaa = LOW_END ? null : new SMAAPass(window.innerWidth, window.innerHeight);
+if (smaa) composer.addPass(smaa);
 
 const clock = new THREE.Clock();
 const camOffset = new THREE.Vector3(0, 6.8, -14);
@@ -1035,6 +1070,7 @@ const tmpVec = new THREE.Vector3();
 const tmpVec2 = new THREE.Vector3();
 let prevSpeed = 0;
 let shake = 0;
+let frameCount = 0;
 
 function finishMission() {
   if (state.finished) return;
@@ -1043,7 +1079,7 @@ function finishMission() {
   const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const secs = String(Math.floor(elapsed % 60)).padStart(2, '0');
   document.getElementById('done-time').textContent = mins + ':' + secs;
-  const key = 'repo-racer-best';
+  const key = 'francos-repo-racer-best';
   const best = Number(localStorage.getItem(key) || 0);
   const bestEl = document.getElementById('done-best');
   if (!best || elapsed < best) {
@@ -1060,11 +1096,11 @@ function finishMission() {
 function update(dt) {
   const active = state.started && !state.finished;
   if (active) {
-    if (keys.up) state.speed += 28 * stats.accel * dt;
-    else if (keys.down) state.speed -= BRAKE * dt;
+    if (keys.up || pad.up) state.speed += 28 * stats.accel * dt;
+    else if (keys.down || pad.down) state.speed -= BRAKE * dt;
     else state.speed *= Math.exp(-FRICTION * dt);
 
-    state.boosting = keys.nitro && state.nitro > 0.02 && state.speed > 2;
+    state.boosting = (keys.nitro || pad.nitro) && state.nitro > 0.02 && state.speed > 2;
     if (state.boosting) {
       state.speed += 46 * dt;
       state.nitro = Math.max(0, state.nitro - dt * 0.33);
@@ -1075,7 +1111,7 @@ function update(dt) {
     state.speed = clamp(state.speed, MAX_REVERSE, maxSpeed);
     if (!state.boosting && state.speed > stats.max) state.speed -= 18 * dt;
 
-    const steerInput = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+    const steerInput = ((keys.left || pad.left) ? 1 : 0) - ((keys.right || pad.right) ? 1 : 0);
     const speedFactor = Math.min(1, Math.abs(state.speed) / 12);
     state.steer += (steerInput * speedFactor - state.steer) * Math.min(1, dt * 8);
     state.heading += state.steer * 2.15 * stats.grip * dt * Math.sign(state.speed || 1);
@@ -1091,7 +1127,13 @@ function update(dt) {
   const accelNow = (state.speed - prevSpeed) / Math.max(dt, 0.001);
   prevSpeed = state.speed;
   state.pitch += (clamp(-accelNow * 0.004, -0.06, 0.06) - state.pitch) * Math.min(1, dt * 5);
-  carBody.rotation.x = state.pitch;
+  const hAhead = groundHeightAt(car.position.x + Math.sin(state.heading) * 1.4, car.position.z + Math.cos(state.heading) * 1.4);
+  const hBehind = groundHeightAt(car.position.x - Math.sin(state.heading) * 1.4, car.position.z - Math.cos(state.heading) * 1.4);
+  const targetSlope = state.airborne
+    ? clamp(-state.vy * 0.045, -0.3, 0.3)
+    : -Math.atan2(hAhead - hBehind, 2.8);
+  state.slope += (targetSlope - state.slope) * Math.min(1, dt * 9);
+  carBody.rotation.x = state.pitch + state.slope;
   carBody.rotation.z = -state.steer * 0.07;
 
   const gh = groundHeightAt(car.position.x, car.position.z);
@@ -1119,8 +1161,9 @@ function update(dt) {
   if (Math.abs(car.position.x) > WORLD_BOUND) { car.position.x = Math.sign(car.position.x) * WORLD_BOUND; state.speed *= 0.3; }
   if (Math.abs(car.position.z) > WORLD_BOUND) { car.position.z = Math.sign(car.position.z) * WORLD_BOUND; state.speed *= 0.3; }
 
-  if (state.y < 0.6) {
+  if (state.y < 30) {
     for (const b of buildings) {
+      if (state.y > b.h) continue;
       const dx = car.position.x - b.x, dz = car.position.z - b.z;
       const px = (b.w / 2 + 1.4) - Math.abs(dx);
       const pz = (b.d / 2 + 1.4) - Math.abs(dz);
@@ -1142,7 +1185,7 @@ function update(dt) {
     if (t.mesh.position.x < -230) t.mesh.position.x = 230;
     const tgh = groundHeightAt(t.mesh.position.x, t.mesh.position.z);
     t.mesh.position.y += (tgh - t.mesh.position.y) * Math.min(1, dt * 8);
-    if (state.y < 0.6) {
+    if (state.y < 2.2) {
       const dx = car.position.x - t.mesh.position.x;
       const dz = car.position.z - t.mesh.position.z;
       const d = Math.hypot(dx, dz);
@@ -1237,6 +1280,11 @@ function update(dt) {
   sun.target.position.set(car.position.x, 0, car.position.z);
   sun.target.updateMatrixWorld();
 
+  updateAudio(FIXED_DT, drifting);
+}
+
+function present(dt) {
+  pollGamepad();
   const targetFov = 62 + clamp(Math.abs(state.speed) * 0.4, 0, state.boosting ? 20 : 14);
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 3);
   camera.updateProjectionMatrix();
@@ -1265,14 +1313,60 @@ function update(dt) {
     const elapsed = (performance.now() - state.startTime) / 1000;
     timerEl.textContent = String(Math.floor(elapsed / 60)).padStart(2, '0') + ':' + String(Math.floor(elapsed % 60)).padStart(2, '0');
   }
-  updateAudio(dt, drifting);
-  drawMinimap();
+  frameCount++;
+  if (frameCount % 2 === 0) drawMinimap();
 }
 
+const FIXED_DT = 1 / 60;
+const MAX_STEPS = 5;
+let accumulator = 0;
+
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.05);
-  update(dt);
+  const frameDt = Math.min(clock.getDelta(), 0.05);
+  accumulator = Math.min(accumulator + frameDt, 0.25);
+  let steps = 0;
+  while (accumulator >= FIXED_DT && steps < MAX_STEPS) {
+    update(FIXED_DT);
+    accumulator -= FIXED_DT;
+    steps++;
+  }
+  if (steps === MAX_STEPS) accumulator = 0;
+  present(frameDt);
   composer.render();
+});
+
+['keydown', 'pointerdown', 'touchstart'].forEach((ev) => {
+  window.addEventListener(ev, () => {
+    if (audio.ctx && audio.ctx.state === 'suspended') audio.ctx.resume();
+  }, { passive: true });
+});
+
+window.addEventListener('error', (e) => {
+  const el = document.getElementById('start');
+  if (el && !el.classList.contains('hide')) {
+    const tag = el.querySelector('.tag');
+    if (tag) tag.textContent = 'Falha ao carregar o jogo: ' + (e.message || 'erro desconhecido') + ' — verifique a conexao (CDN) e recarregue a pagina.';
+  }
+});
+
+window.addEventListener('beforeunload', () => {
+  try {
+    if (audio.ctx && audio.ctx.state !== 'closed') audio.ctx.close();
+    composer.dispose();
+    renderer.dispose();
+    scene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      const mats = obj.material ? (Array.isArray(obj.material) ? obj.material : [obj.material]) : [];
+      for (const mat of mats) {
+        for (const key of ['map', 'emissiveMap', 'normalMap', 'alphaMap']) {
+          if (mat[key] && mat[key].dispose) mat[key].dispose();
+        }
+        if (mat.dispose) mat.dispose();
+      }
+    });
+  } catch (e) {
+    /* cleanup best-effort */
+  }
 });
 
 window.addEventListener('resize', () => {
@@ -1280,7 +1374,7 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
-  smaa.setSize(window.innerWidth, window.innerHeight);
+  if (smaa) smaa.setSize(window.innerWidth, window.innerHeight);
 });
 </script>
 </body>
