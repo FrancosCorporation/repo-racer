@@ -39,16 +39,27 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
 - **Garagem com 3 carros** — NEON (equilibrado), PHANTOM (veloz, traseira
   solta) e TANK (firme) — cada um com cor e dirigibilidade próprias
 - **Nitro (Shift)** com barra de recarga, chamas no escapamento e FOV dinâmico
+- **Freio de mão (Espaço)** que derrapa de verdade: segure perto da curva para
+  escorregar a traseira com fumaça e marcas de pneu
+- **Pontuação de drift com combo até x8** — a cadeia de derrapagem acumula
+  pontos ao vivo; bater no muro ou no trânsito perde a cadeia ("COMBO
+  PERDIDO!") e o recorde de pontos fica salvo no navegador
+- **Coletáveis de N2O** espalhados pelas avenidas: reenchem o nitro na hora e
+  somam **+400** pontos (renascem em 40 s)
+- **Bússola do próximo repositório**: seta girando, nome e distância até a
+  praça não visitada mais próxima
 - **Trânsito com colisão**: carros circulam pelas avenidas e te atrapalham
 - **Rampas com física de pulo**: decole, voe e aterrisse com fumaça
 - **Som procedural** (WebAudio, sem arquivos): motor que responde à
-  velocidade, cantada de pneu na derrapagem e mute com `M`
+  velocidade, cantada de pneu na derrapagem, chime ao visitar um repositório,
+  blip de coleta e batida — mute com `M`
 - **Marcas de derrapagem**, fumaça nos pneus e shake de câmera
-- **Missão e cronômetro**: explore os 13 projetos, veja seu tempo e o recorde
-  salvo no navegador
+- **Missão e cronômetro**: explore os 13 projetos, veja seu tempo, sua
+  pontuação e o recorde salvo no navegador
 - **Minimapa** em tempo real com praças, rampas, trânsito e sua posição
-- **HUD** com velocidade, nitro, progresso e painel do repositório
-- **Controles de toque** para celular e **suporte a gamepad** (analógico + botões)
+- **HUD** com velocidade, nitro, pontos/combo, progresso e painel do repositório
+- **Controles de toque** para celular (com botão DERRAPA) e **suporte a
+  gamepad** (analógico + botões)
 - **Qualidade adaptativa**: detecta mobile/GPU fraca e reduz sombras/pixel ratio (sem SMAA)
 - **Timestep fixo** de física (60 Hz) e limpeza de recursos ao sair
 
@@ -63,10 +74,12 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
 | Nitro | `Shift` |
 | Abrir o repositório | `E` |
 | Ligar/desligar som | `M` |
-| Gamepad | analógico + botões (A = acelerar, B = frear, R1 = nitro) |
+| Gamepad | analógico + botões (A = acelerar, B = frear, R1 = nitro, LB = freio de mão) |
 
-No celular aparecem botões na tela. O contador no topo mostra quantos
-repositórios você já visitou — complete os 13 para fechar a missão.
+No celular aparecem botões na tela, incluindo **DERRAPA**. O contador no topo
+mostra quantos repositórios você já visitou — complete os 13 para fechar a
+missão. Derrapar, coletar N2O e visitar repositórios pontuam: façam o maior
+recorde de pontos antes que o tempo acabe.
 
 ## Jogar online
 

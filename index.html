@@ -30,7 +30,18 @@
   #stats .row { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; font-size: 12px; color: #9fb8cc; }
   #nitro-wrap { margin-top: 6px; height: 7px; background: rgba(255,255,255,.08); border-radius: 4px; overflow: hidden; }
   #nitro { height: 100%; width: 100%; background: linear-gradient(90deg, #00e5ff, #7c4dff); transition: width .1s linear; }
-  #minimap { position: absolute; top: 160px; right: 14px; border-radius: 12px; opacity: .92; }
+  #minimap { position: absolute; top: 232px; right: 14px; border-radius: 12px; opacity: .92; }
+  #way { top: 154px; right: 14px; min-width: 176px; text-align: right; padding: 8px 12px; display: none; }
+  #way.show { display: block; }
+  #way .label { font-size: 10px; letter-spacing: 1px; color: #7f97ab; }
+  #way .arrow { display: block; width: 26px; margin: 2px 0 0 auto; font-size: 22px; line-height: 1; color: var(--green); text-shadow: 0 0 12px rgba(57,255,136,.85); transition: transform .1s linear; }
+  #way .dist { font-size: 12px; color: #cfe6f5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .score-row { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; font-size: 12px; color: #9fb8cc; }
+  #score { color: #ffd54f; font-size: 18px; text-shadow: 0 0 12px rgba(255,213,79,.65); }
+  #combo { color: var(--magenta); font-weight: bold; text-shadow: 0 0 10px rgba(255,45,149,.85); }
+  #combo.hot { font-size: 16px; }
+  #toast { position: fixed; top: 104px; left: 50%; transform: translateX(-50%); font-size: 15px; letter-spacing: 2px; color: var(--green); text-shadow: 0 0 14px rgba(57,255,136,.9); opacity: 0; transition: opacity .25s ease; z-index: 15; pointer-events: none; }
+  #toast.show { opacity: 1; }
   #pad {
     left: 50%; bottom: 30px; transform: translateX(-50%);
     min-width: 360px; max-width: 92vw; text-align: center;
@@ -89,7 +100,8 @@
   #t-gas { right: 18px; }
   #t-brake { right: calc(18px + var(--tbtn) + 14px); }
   #t-nitro { right: calc(18px + 2 * (var(--tbtn) + 14px)); font-size: clamp(13px, 1.8vw, 18px); letter-spacing: 1px; }
-  @media (pointer: coarse) { .tbtn { display: flex; } #minimap { top: auto; bottom: 170px; } }
+  #t-hb { left: 50%; bottom: 18px; transform: translateX(-50%); width: calc(var(--tbtn) * 1.5); border-radius: 999px; font-size: clamp(12px, 1.6vw, 16px); letter-spacing: 1px; }
+  @media (pointer: coarse) { .tbtn { display: flex; } #minimap { top: auto; bottom: 170px; } #pad { bottom: calc(var(--tbtn) + 32px); } }
 </style>
 </head>
 <body>
@@ -97,13 +109,19 @@
   <div id="title" class="box">
     <h1>REPO RACER</h1>
     <p>Dirija e explore os repositorios da <b>FrancosCorporation</b>.</p>
-    <p><b>WASD</b> dirigir &middot; <b>Shift</b> nitro &middot; <b>Espaco</b> freia &middot; <b>E</b> abre o repo &middot; <b>M</b> som</p>
+    <p><b>WASD</b> dirigir &middot; <b>Shift</b> nitro &middot; <b>Espaco</b> derrapa &middot; <b>E</b> abre o repo &middot; <b>M</b> som</p>
   </div>
   <div id="stats" class="box">
     <div>EXPLORADOS <span class="big" id="visited">0</span>/<span id="total">0</span></div>
     <div class="speed"><span id="speed">0</span> <span class="unit">km/h</span></div>
     <div class="row"><span id="timer">00:00</span><span id="sound">som: on</span></div>
+    <div class="score-row"><span>PONTOS <span id="score">0</span></span><span id="combo"></span></div>
     <div id="nitro-wrap"><div id="nitro"></div></div>
+  </div>
+  <div id="way" class="box">
+    <span class="label">PROXIMO &middot; <span id="way-dist">--</span></span>
+    <span class="arrow" id="way-arrow">&#9650;</span>
+    <div id="way-name" class="dist"></div>
   </div>
   <canvas id="minimap" width="180" height="180"></canvas>
   <div id="pad" class="box">
@@ -111,6 +129,7 @@
     <p id="pad-desc"></p>
     <span class="key">E</span> <span class="open" id="pad-open">abrir no GitHub</span>
   </div>
+  <div id="toast"></div>
 </div>
 <div id="touch">
   <div class="tbtn" id="t-left">&#9664;</div>
@@ -118,6 +137,7 @@
   <div class="tbtn" id="t-gas">&#9650;</div>
   <div class="tbtn" id="t-brake">&#9660;</div>
   <div class="tbtn" id="t-nitro">N2O</div>
+  <div class="tbtn" id="t-hb">DERRAPA</div>
 </div>
 <div id="start">
   <div class="logo">REPO RACER</div>
@@ -125,12 +145,13 @@
     Cada praca iluminada e um projeto: pare em cima, leia o banner e aperte <b>E</b> para abrir no GitHub.</div>
   <div id="garage"></div>
   <div class="cta" id="go">DIRIGIR</div>
-  <div class="keys">WASD / setas &middot; shift nitro &middot; espaco freia &middot; E abre o repo &middot; M som</div>
+  <div class="keys">WASD / setas &middot; shift nitro &middot; espaco derrapa &middot; E abre o repo &middot; M som</div>
 </div>
 <div id="done">
   <div class="big">MISSAO CUMPRIDA</div>
   <div class="sub">Voce explorou os <b>13</b> projetos em <b id="done-time">--:--</b>.</div>
   <div class="sub" id="done-best"></div>
+  <div class="sub" id="done-score"></div>
   <button id="again">JOGAR DE NOVO</button>
   <a href="https://github.com/FrancosCorporation" target="_blank" rel="noopener">ABRIR O PERFIL</a>
 </div>
@@ -172,6 +193,13 @@ const REPOS = [
 const PAD_POS = [
   [40, 40], [-40, -40], [40, -40], [120, -40], [120, 40], [120, 120], [40, 120],
   [-40, 120], [-120, 120], [-120, 40], [-120, -40], [-40, -120], [40, -120]
+];
+
+const PICKUP_POS = [
+  [-160, 40], [-160, -120], [-80, 40], [-80, -120],
+  [0, 40], [0, -40], [0, 120],
+  [80, 40], [80, -120], [160, 40], [160, -120],
+  [-40, 0], [40, 0], [120, 0], [-120, 160]
 ];
 
 const ROADS = [-160, -80, 0, 80, 160];
@@ -715,6 +743,17 @@ for (const fx of [-0.55, 0.55]) {
   flames.push(sprite);
 }
 
+const pickupGeo = new THREE.TorusGeometry(0.7, 0.18, 10, 26);
+const pickups = PICKUP_POS.map(([x, z], i) => {
+  const mesh = new THREE.Mesh(pickupGeo, new THREE.MeshStandardMaterial({ color: 0x061018, emissive: 0x00e5ff, emissiveIntensity: 3, toneMapped: false }));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTex, transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false }));
+  halo.scale.set(2.6, 2.6, 1);
+  mesh.add(halo);
+  mesh.position.set(x, 1.5, z);
+  scene.add(mesh);
+  return { i, x, z, mesh, active: true, respawn: 0 };
+});
+
 const blobTex = makeRadialTexture('rgba(0,0,0,0.55)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0)');
 const blobGeo = new THREE.PlaneGeometry(3.6, 4.8);
 blobGeo.rotateX(-Math.PI / 2);
@@ -805,7 +844,7 @@ function addSkid(x, z, heading) {
   s.mesh.material.opacity = 0.5;
 }
 
-const audio = { ctx: null, muted: false, engine: null, screech: null };
+const audio = { ctx: null, muted: false, engine: null, screech: null, noiseBuf: null };
 function initAudio() {
   if (audio.ctx) return;
   try {
@@ -833,6 +872,7 @@ function initAudio() {
     const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    audio.noiseBuf = buffer;
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.loop = true;
@@ -865,6 +905,54 @@ function updateAudio(dt, drifting) {
   audio.screech.gain.gain.value += (screechTarget - audio.screech.gain.gain.value) * Math.min(1, dt * 8);
 }
 
+function tone(freq, dur, opts = {}) {
+  if (!audio.ctx || audio.muted) return;
+  const type = opts.type || 'square';
+  const gain = opts.gain || 0.06;
+  const freqEnd = opts.freqEnd || 0;
+  const delay = opts.delay || 0;
+  const ctx = audio.ctx;
+  const t0 = ctx.currentTime + delay;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t0);
+  if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(gain, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g);
+  g.connect(ctx.destination);
+  o.start(t0);
+  o.stop(t0 + dur + 0.05);
+}
+
+function thud() {
+  if (!audio.ctx || audio.muted || !audio.noiseBuf) return;
+  const ctx = audio.ctx;
+  const t0 = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = audio.noiseBuf;
+  const flt = ctx.createBiquadFilter();
+  flt.type = 'lowpass';
+  flt.frequency.value = 420;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.3, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.3);
+  src.connect(flt);
+  flt.connect(g);
+  g.connect(ctx.destination);
+  src.start(t0, Math.random());
+  src.stop(t0 + 0.32);
+}
+
+function visitChime() {
+  tone(660, 0.12, { type: 'triangle', gain: 0.07 });
+  tone(990, 0.18, { type: 'triangle', gain: 0.07, delay: 0.1 });
+}
+function pickupBlip() { tone(560, 0.14, { freqEnd: 1120, gain: 0.06 }); }
+function comboBlip(combo) { tone(480 + combo * 90, 0.07, { gain: 0.05 }); }
+
 const state = { speed: 0, heading: 0, steer: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, nitro: 1, boosting: false, started: false, startTime: 0, finished: false };
 const stats = { accel: 1, max: 34, grip: 1 };
 car.position.set(0, 0, -34);
@@ -891,14 +979,14 @@ if (shotMode) {
 }
 
 const MAX_REVERSE = -9, BRAKE = 50, FRICTION = 9;
-const keys = { up: false, down: false, left: false, right: false, nitro: false };
-const pad = { up: false, down: false, left: false, right: false, nitro: false, open: false, prevOpen: false };
+const keys = { up: false, down: false, left: false, right: false, nitro: false, hb: false };
+const pad = { up: false, down: false, left: false, right: false, nitro: false, hb: false, open: false, prevOpen: false };
 
 function pollGamepad() {
   if (!navigator.getGamepads) return;
   const gp = Array.from(navigator.getGamepads()).find(Boolean);
   if (!gp) {
-    pad.up = pad.down = pad.left = pad.right = pad.nitro = false;
+    pad.up = pad.down = pad.left = pad.right = pad.nitro = pad.hb = false;
     return;
   }
   const ax = gp.axes[0] || 0;
@@ -907,6 +995,7 @@ function pollGamepad() {
   pad.up = (gp.buttons[7] && gp.buttons[7].pressed) || (gp.buttons[0] && gp.buttons[0].pressed);
   pad.down = (gp.buttons[6] && gp.buttons[6].pressed) || (gp.buttons[1] && gp.buttons[1].pressed);
   pad.nitro = (gp.buttons[5] && gp.buttons[5].pressed) || (gp.buttons[2] && gp.buttons[2].pressed);
+  pad.hb = !!(gp.buttons[4] && gp.buttons[4].pressed);
   pad.open = (gp.buttons[3] && gp.buttons[3].pressed) || (gp.buttons[9] && gp.buttons[9].pressed);
   if (pad.open && !pad.prevOpen) {
     if (!state.started) startGame();
@@ -957,6 +1046,7 @@ window.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'a', 'A'].includes(e.key)) keys.left = true;
   if (['ArrowRight', 'd', 'D'].includes(e.key)) keys.right = true;
   if (e.key === 'Shift') keys.nitro = true;
+  if (e.key === ' ') keys.hb = true;
   if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') openActive();
   if (e.key === 'm' || e.key === 'M') {
     audio.muted = !audio.muted;
@@ -971,6 +1061,7 @@ window.addEventListener('keyup', (e) => {
   if (['ArrowLeft', 'a', 'A'].includes(e.key)) keys.left = false;
   if (['ArrowRight', 'd', 'D'].includes(e.key)) keys.right = false;
   if (e.key === 'Shift') keys.nitro = false;
+  if (e.key === ' ') keys.hb = false;
 });
 
 function bindTouch(id, key) {
@@ -985,6 +1076,7 @@ bindTouch('t-right', 'right');
 bindTouch('t-gas', 'up');
 bindTouch('t-brake', 'down');
 bindTouch('t-nitro', 'nitro');
+bindTouch('t-hb', 'hb');
 
 const visitedEl = document.getElementById('visited');
 const totalEl = document.getElementById('total');
@@ -996,6 +1088,51 @@ const padName = document.getElementById('pad-name');
 const padDesc = document.getElementById('pad-desc');
 document.getElementById('pad-open').addEventListener('click', openActive);
 totalEl.textContent = String(REPOS.length);
+
+const scoreEl = document.getElementById('score');
+const comboEl = document.getElementById('combo');
+const wayEl = document.getElementById('way');
+const wayArrow = document.getElementById('way-arrow');
+const wayDist = document.getElementById('way-dist');
+const wayName = document.getElementById('way-name');
+const toastEl = document.getElementById('toast');
+const SCORE_KEY = 'francos-repo-racer-score';
+
+const scoreState = { total: 0, chain: 0, combo: 1, chainTime: 0, grace: 0 };
+let wayTarget = null;
+let crashCd = 0;
+let toastTimer = 0;
+
+function toast(msg, color) {
+  toastEl.textContent = msg;
+  toastEl.style.color = color || 'var(--green)';
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1400);
+}
+
+function bankScore() {
+  if (scoreState.chain <= 0) return;
+  scoreState.total += Math.round(scoreState.chain);
+  scoreState.chain = 0;
+  scoreState.combo = 1;
+  scoreState.chainTime = 0;
+  scoreState.grace = 0;
+  const best = Number(localStorage.getItem(SCORE_KEY) || 0);
+  if (scoreState.total > best) localStorage.setItem(SCORE_KEY, String(scoreState.total));
+}
+
+function onCrash() {
+  if (scoreState.chain > 0) toast('COMBO PERDIDO!', '#ff5470');
+  scoreState.chain = 0;
+  scoreState.combo = 1;
+  scoreState.chainTime = 0;
+  scoreState.grace = 0;
+  if (crashCd <= 0) {
+    thud();
+    crashCd = 0.45;
+  }
+}
 
 let activePad = null;
 let visitedCount = 0;
@@ -1090,15 +1227,24 @@ function finishMission() {
     const bs = String(Math.floor(best % 60)).padStart(2, '0');
     bestEl.textContent = 'Melhor tempo: ' + bm + ':' + bs;
   }
+  const prevScoreBest = Number(localStorage.getItem(SCORE_KEY) || 0);
+  bankScore();
+  const finalScore = scoreState.total;
+  document.getElementById('done-score').textContent = finalScore > prevScoreBest
+    ? 'Pontuacao: ' + finalScore + ' — novo recorde de pontos!'
+    : 'Pontuacao: ' + finalScore + ' (recorde: ' + prevScoreBest + ')';
   document.getElementById('done').classList.add('show');
 }
 
 function update(dt) {
   const active = state.started && !state.finished;
+  crashCd = Math.max(0, crashCd - dt);
+  const hbNow = keys.hb || pad.hb;
   if (active) {
     if (keys.up || pad.up) state.speed += 28 * stats.accel * dt;
     else if (keys.down || pad.down) state.speed -= BRAKE * dt;
     else state.speed *= Math.exp(-FRICTION * dt);
+    if (hbNow && !state.airborne && Math.abs(state.speed) > 0.5) state.speed *= Math.exp(-2.4 * dt);
 
     state.boosting = (keys.nitro || pad.nitro) && state.nitro > 0.02 && state.speed > 2;
     if (state.boosting) {
@@ -1113,8 +1259,9 @@ function update(dt) {
 
     const steerInput = ((keys.left || pad.left) ? 1 : 0) - ((keys.right || pad.right) ? 1 : 0);
     const speedFactor = Math.min(1, Math.abs(state.speed) / 12);
-    state.steer += (steerInput * speedFactor - state.steer) * Math.min(1, dt * 8);
-    state.heading += state.steer * 2.15 * stats.grip * dt * Math.sign(state.speed || 1);
+    const steerTarget = steerInput * speedFactor * (hbNow ? 1.3 : 1);
+    state.steer += (steerTarget - state.steer) * Math.min(1, dt * 8);
+    state.heading += state.steer * 2.15 * stats.grip * (hbNow ? 1.35 : 1) * dt * Math.sign(state.speed || 1);
   } else {
     state.speed *= Math.exp(-FRICTION * dt);
     state.boosting = false;
@@ -1158,8 +1305,8 @@ function update(dt) {
   }
   car.position.y = state.y;
 
-  if (Math.abs(car.position.x) > WORLD_BOUND) { car.position.x = Math.sign(car.position.x) * WORLD_BOUND; state.speed *= 0.3; }
-  if (Math.abs(car.position.z) > WORLD_BOUND) { car.position.z = Math.sign(car.position.z) * WORLD_BOUND; state.speed *= 0.3; }
+  if (Math.abs(car.position.x) > WORLD_BOUND) { car.position.x = Math.sign(car.position.x) * WORLD_BOUND; state.speed *= 0.3; onCrash(); }
+  if (Math.abs(car.position.z) > WORLD_BOUND) { car.position.z = Math.sign(car.position.z) * WORLD_BOUND; state.speed *= 0.3; onCrash(); }
 
   if (state.y < 30) {
     for (const b of buildings) {
@@ -1172,6 +1319,7 @@ function update(dt) {
         else car.position.z = b.z + Math.sign(dz || 1) * (b.d / 2 + 1.4);
         state.speed *= 0.3;
         shake = Math.min(1, shake + 0.25);
+        onCrash();
       }
     }
   }
@@ -1195,6 +1343,7 @@ function update(dt) {
         car.position.z += nz * (2.6 - d);
         state.speed *= 0.45;
         shake = Math.min(1, shake + 0.35);
+        onCrash();
       }
     }
   }
@@ -1204,7 +1353,21 @@ function update(dt) {
     if (w.front) w.pivot.rotation.y = state.steer * 0.5;
   }
 
-  const drifting = Math.abs(state.steer) > 0.45 && Math.abs(state.speed) > 14;
+  const drifting = (Math.abs(state.steer) > 0.45 && Math.abs(state.speed) > 14) ||
+    (hbNow && Math.abs(state.steer) > 0.15 && Math.abs(state.speed) > 7);
+  if (active) {
+    if (drifting && !state.airborne && state.y < 0.2) {
+      const prevCombo = scoreState.combo;
+      scoreState.chainTime += dt;
+      scoreState.grace = 1.4;
+      scoreState.combo = Math.min(8, 1 + Math.floor(scoreState.chainTime / 2));
+      scoreState.chain += Math.abs(state.speed) * dt * 1.4 * scoreState.combo;
+      if (scoreState.combo > prevCombo) comboBlip(scoreState.combo);
+    } else if (scoreState.chain > 0) {
+      scoreState.grace -= dt;
+      if (scoreState.grace <= 0) bankScore();
+    }
+  }
   smokeTimer -= dt;
   skidTimer -= dt;
   if (drifting && state.y < 0.2) {
@@ -1240,6 +1403,25 @@ function update(dt) {
     f.material.opacity = state.boosting ? 0.7 + Math.random() * 0.3 : 0;
     f.scale.set(0.7 + Math.random() * 0.5, 0.7 + Math.random() * 0.5, 1);
   }
+  for (const pk of pickups) {
+    if (!pk.active) {
+      pk.respawn -= dt;
+      if (pk.respawn <= 0) { pk.active = true; pk.mesh.visible = true; }
+      continue;
+    }
+    pk.mesh.rotation.y += dt * 2.4;
+    pk.mesh.position.y = 1.5 + Math.sin(performance.now() * 0.003 + pk.i) * 0.28;
+    if (!active || state.y > 2.5) continue;
+    if (Math.hypot(car.position.x - pk.x, car.position.z - pk.z) < 2.4) {
+      pk.active = false;
+      pk.mesh.visible = false;
+      pk.respawn = 40;
+      state.nitro = 1;
+      scoreState.total += 400;
+      pickupBlip();
+      toast('N2O RECUPERADO  +400');
+    }
+  }
   glow.intensity = state.boosting ? 6 : 3;
   headlight.intensity = 70 + Math.abs(state.speed);
 
@@ -1253,6 +1435,19 @@ function update(dt) {
     p.banner.material.opacity = p === activePad ? 1 : 0.82;
     if (d < nearestDist) { nearest = p; nearestDist = d; }
   }
+  let nt = null, nd = Infinity;
+  for (const p of pads) {
+    if (p.visited) continue;
+    const pd = Math.hypot(car.position.x - p.x, car.position.z - p.z);
+    if (pd < nd) { nd = pd; nt = p; }
+  }
+  wayTarget = nt;
+  if (nt) {
+    wayName.textContent = nt.repo.name;
+    wayEl.classList.add('show');
+  } else {
+    wayEl.classList.remove('show');
+  }
   if (nearest !== activePad) {
     activePad = nearest;
     if (activePad) {
@@ -1265,6 +1460,9 @@ function update(dt) {
         visitedEl.textContent = String(visitedCount);
         activePad.ring.material.color.set(0x39ff88);
         activePad.ring.material.emissive.set(0x39ff88);
+        scoreState.total += 250;
+        visitChime();
+        toast('REPOSITORIO VISITADO  +250');
         if (visitedCount === REPOS.length) finishMission();
       }
     } else {
@@ -1309,6 +1507,16 @@ function present(dt) {
 
   speedEl.textContent = String(Math.round(Math.abs(state.speed) * 3.6));
   nitroEl.style.width = Math.round(state.nitro * 100) + '%';
+  scoreEl.textContent = String(Math.round(scoreState.total + scoreState.chain));
+  comboEl.textContent = scoreState.combo > 1 ? 'x' + scoreState.combo : '';
+  comboEl.classList.toggle('hot', scoreState.combo >= 4);
+  if (wayTarget) {
+    const wdx = wayTarget.x - car.position.x, wdz = wayTarget.z - car.position.z;
+    let rel = Math.atan2(wdx, wdz) - state.heading;
+    rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+    wayArrow.style.transform = 'rotate(' + (rel * 180 / Math.PI).toFixed(1) + 'deg)';
+    wayDist.textContent = Math.round(Math.hypot(wdx, wdz)) + ' m';
+  }
   if (state.started && !state.finished) {
     const elapsed = (performance.now() - state.startTime) / 1000;
     timerEl.textContent = String(Math.floor(elapsed / 60)).padStart(2, '0') + ':' + String(Math.floor(elapsed % 60)).padStart(2, '0');
