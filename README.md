@@ -52,7 +52,8 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
   "ENFRENTAR O CHEFÃO": telegrafa, carga e janela de vulnerabilidade, 3
   corações contra 100 de vida em 90 s (atalho: `?boss=1`)
 - **Trânsito com colisão**: carros circulam pelas avenidas e te atrapalham
-- **Rampas com física de pulo**: decole, voe e aterrisse com fumaça
+- **Rampas com física de pulo**: decole, voe e aterrisse com fumaça (o salto
+  só dispara no sentido de subida — encostar no paredão não lança mais)
 - **Som procedural** (WebAudio, sem arquivos): motor que responde à
   velocidade, cantada de pneu na derrapagem, chime ao visitar um repositório,
   blip de coleta e batida — mute com `M`

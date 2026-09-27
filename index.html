@@ -527,6 +527,15 @@ for (const [rx, rz, rotY] of RAMP_DEFS) {
 
 const PAD_RADIUS = 5;
 const PAD_TOP = 0.26;
+function rampAt(x, z) {
+  for (const r of ramps) {
+    const dx = x - r.x, dz = z - r.z;
+    const lx = dx * Math.cos(r.rotY) - dz * Math.sin(r.rotY);
+    const lz = dx * Math.sin(r.rotY) + dz * Math.cos(r.rotY);
+    if (Math.abs(lx) <= r.L / 2 && Math.abs(lz) <= r.W / 2) return r;
+  }
+  return null;
+}
 function groundHeightAt(x, z) {
   let h = 0;
   for (const r of ramps) {
@@ -1573,7 +1582,15 @@ function update(dt) {
   const gh = groundHeightAt(car.position.x, car.position.z);
   if (!state.airborne) {
     if (gh > state.y - 0.02) {
-      state.vy = (gh - state.y) / Math.max(dt, 0.001);
+      let v = (gh - state.y) / Math.max(dt, 0.001);
+      const rc = rampAt(car.position.x, car.position.z);
+      if (rc) {
+        // direcao de subida da rampa no mundo: local +x -> (cos rotY, -sin rotY)
+        const approach = Math.sin(state.heading) * Math.cos(rc.rotY) - Math.cos(state.heading) * Math.sin(rc.rotY);
+        if (approach <= 0.25) v = Math.min(v, 0); // veio do paredao/lateral: sem lancamento
+        else v *= approach;
+      }
+      state.vy = clamp(v, -30, 10);
       state.y = gh;
     } else if (state.y > gh + 0.05) {
       state.airborne = true;
@@ -1891,6 +1908,13 @@ if (params.has('debug')) {
     hurtPlayer: () => hurtPlayer(true),
     getBoss: () => boss,
     bossEnd,
+    setCar: (x, z, h, s) => {
+      car.position.x = x; car.position.z = z;
+      state.y = 0; state.vy = 0; state.airborne = false;
+      if (h !== undefined) state.heading = h;
+      if (s !== undefined) state.speed = s;
+    },
+    carState: () => [car.position.x, car.position.z, state.y, state.vy, state.airborne],
   };
 }
 if (params.has('boss')) {
