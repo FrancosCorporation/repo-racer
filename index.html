@@ -1222,7 +1222,7 @@ function visitChime() {
 function pickupBlip() { tone(560, 0.14, { freqEnd: 1120, gain: 0.06 }); }
 function comboBlip(combo) { tone(480 + combo * 90, 0.07, { gain: 0.05 }); }
 
-const state = { speed: 0, heading: 0, steer: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, nitro: 1, boosting: false, started: false, startTime: 0, finished: false, bossActive: false };
+const state = { speed: 0, heading: 0, steer: 0, slip: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, nitro: 1, boosting: false, started: false, startTime: 0, finished: false, bossActive: false };
 const stats = { accel: 1, max: 34, grip: 1 };
 car.position.set(0, 0, -34);
 car.rotation.y = 0;
@@ -1563,9 +1563,16 @@ function update(dt) {
     state.boosting = false;
   }
 
-  car.position.x += Math.sin(state.heading) * state.speed * dt;
-  car.position.z += Math.cos(state.heading) * state.speed * dt;
-  car.rotation.y = state.heading;
+  // deriva lateral: a frente (visao) gira mais rapido que a direcao real do movimento
+  const spd = Math.abs(state.speed);
+  const driftAmt = hbNow ? 0.85 : clamp((spd - 14) / 18, 0, 0.7);
+  const slide = clamp(state.steer, -1, 1) * driftAmt * Math.sign(state.speed || 1);
+  state.slip += (slide - state.slip) * Math.min(1, dt * (hbNow ? 7 : 5));
+  if (!active) state.slip *= Math.exp(-4 * dt);
+  const moveH = state.heading - state.slip * 0.5;
+  car.position.x += Math.sin(moveH) * state.speed * dt;
+  car.position.z += Math.cos(moveH) * state.speed * dt;
+  car.rotation.y = state.heading + state.slip * 0.28;
 
   const accelNow = (state.speed - prevSpeed) / Math.max(dt, 0.001);
   prevSpeed = state.speed;
@@ -1928,6 +1935,7 @@ if (params.has('debug')) {
       if (s !== undefined) state.speed = s;
     },
     carState: () => [car.position.x, car.position.z, state.y, state.vy, state.airborne],
+    carSlip: () => [state.slip, state.steer, state.speed, state.heading],
   };
 }
 if (params.has('boss')) {
