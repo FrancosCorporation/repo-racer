@@ -48,6 +48,9 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
   somam **+400** pontos (renascem em 40 s)
 - **Bússola do próximo repositório**: seta girando, nome e distância até a
   praça não visitada mais próxima
+- **Chefão final: SEGV** — complete os 13 repos e libere o duelo no botão
+  "ENFRENTAR O CHEFÃO": telegrafa, carga e janela de vulnerabilidade, 3
+  corações contra 100 de vida em 90 s (atalho: `?boss=1`)
 - **Trânsito com colisão**: carros circulam pelas avenidas e te atrapalham
 - **Rampas com física de pulo**: decole, voe e aterrisse com fumaça
 - **Som procedural** (WebAudio, sem arquivos): motor que responde à
@@ -80,6 +83,23 @@ No celular aparecem botões na tela, incluindo **DERRAPA**. O contador no topo
 mostra quantos repositórios você já visitou — complete os 13 para fechar a
 missão. Derrapar, coletar N2O e visitar repositórios pontuam: façam o maior
 recorde de pontos antes que o tempo acabe.
+
+## O Chefão
+
+Depois de explorar os 13 repositórios, o botão **ENFRENTAR O CHEFÃO** libera o
+duelo final contra **SEGV**, a máquina caçadora. Atalho direto para o combate:
+`index.html?boss=1`.
+
+- SEGV **persegue**, **telegrafa** (olho piscando + beep) e parte para a
+  **carga** — mais rápida que o seu carro; desvie!
+- Enquanto ele se **recupera** (2,2 s parado), arremesse o carro nele:
+  **-20 de vida** (-30 com nitro)
+- Isca a carga contra um **prédio**: ele leva **-15** e fica atordoado
+- Encostar fora da janela de vulnerabilidade custa **1 coração**
+- Ele tem **100 de vida**; você tem **3 corações** e **90 segundos** — use o
+  nitro e os coletáveis de N2O a seu favor
+- Vitória vale **+5.000 pontos**; a derrota tem **TENTAR DE NOVO** (reinicia
+  só a luta, sem perder seu progresso)
 
 ## Jogar online
 
