@@ -1584,14 +1584,23 @@ function update(dt) {
     if (gh > state.y - 0.02) {
       let v = (gh - state.y) / Math.max(dt, 0.001);
       const rc = rampAt(car.position.x, car.position.z);
+      let blocked = false;
       if (rc) {
         // direcao de subida da rampa no mundo: local +x -> (cos rotY, -sin rotY)
         const approach = Math.sin(state.heading) * Math.cos(rc.rotY) - Math.cos(state.heading) * Math.sin(rc.rotY);
-        if (approach <= 0.25) v = Math.min(v, 0); // veio do paredao/lateral: sem lancamento
-        else v *= approach;
+        if (approach <= 0.25) {
+          if (gh - state.y > 1.2) {
+            state.speed *= 0.2; // bateu no paredão: para, não sobe
+            state.vy = 0;
+            onCrash();
+            blocked = true;
+          } else v = Math.min(v, 0); // lateral: sem lancamento
+        } else v *= approach;
       }
-      state.vy = clamp(v, -30, 10);
-      state.y = gh;
+      if (!blocked) {
+        state.vy = clamp(v, -30, 10);
+        state.y = gh;
+      }
     } else if (state.y > gh + 0.05) {
       state.airborne = true;
     }
