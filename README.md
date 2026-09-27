@@ -53,7 +53,8 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
   corações contra 100 de vida em 90 s (atalho: `?boss=1`)
 - **Trânsito com colisão**: carros circulam pelas avenidas e te atrapalham
 - **Rampas com física de pulo**: decole, voe e aterrisse com fumaça (o salto
-  só dispara no sentido de subida — o paredão segura o carro como um muro)
+  só dispara no sentido de subida — o paredão segura o carro como um muro,
+  inclusive de marcha à ré)
 - **Som procedural** (WebAudio, sem arquivos): motor que responde à
   velocidade, cantada de pneu na derrapagem, chime ao visitar um repositório,
   blip de coleta e batida — mute com `M`

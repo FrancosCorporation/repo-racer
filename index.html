@@ -1586,8 +1586,11 @@ function update(dt) {
       const rc = rampAt(car.position.x, car.position.z);
       let blocked = false;
       if (rc) {
-        // direcao de subida da rampa no mundo: local +x -> (cos rotY, -sin rotY)
-        const approach = Math.sin(state.heading) * Math.cos(rc.rotY) - Math.cos(state.heading) * Math.sin(rc.rotY);
+        // direcao de subida da rampa no mundo: local +x -> (cos rotY, -sin rotY);
+        // usa a direcao do MOVIMENTO (marcha a re tambem conta) e nao so o heading
+        const sgn = state.speed >= 0 ? 1 : -1;
+        const mx = Math.sin(state.heading) * sgn, mz = Math.cos(state.heading) * sgn;
+        const approach = mx * Math.cos(rc.rotY) - mz * Math.sin(rc.rotY);
         if (approach <= 0.25) {
           if (gh - state.y > 1.2) {
             state.speed *= 0.2; // bateu no paredão: para, não sobe
@@ -1607,6 +1610,7 @@ function update(dt) {
   }
   if (state.airborne) {
     state.vy -= 26 * dt;
+    if (state.vy > 12) state.vy = 12; // rede de seguranca: nenhum salto legitimo passa de 10
     state.y += state.vy * dt;
     if (state.y <= gh) {
       state.y = gh;
