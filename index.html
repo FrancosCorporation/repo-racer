@@ -922,8 +922,9 @@ function startBoss() {
     x: sx, z: sz,
     heading: Math.atan2(car.position.x - sx, car.position.z - sz),
     speed: 0, hp: BOSS_CFG.hp, mode: 'stalk', modeT: 4,
-    flashT: 0, alive: true, lean: 0
+    flashT: 0, alive: true, lean: 0, moveH: 0
   };
+  boss.moveH = boss.heading;
   bossMesh.group.visible = true;
   bossMesh.group.position.set(sx, 0, sz);
   bossMesh.group.rotation.set(0, boss.heading, 0);
@@ -1027,6 +1028,10 @@ function updateBoss(dt) {
   } else if (b.mode === 'charge') {
     target = BOSS_CFG.chargeSpeed;
     if (b.modeT <= 0) { b.mode = 'recover'; b.modeT = 2.2; }
+    else if (dist < 12) {
+      // perto demais: curva fechada para tentar acertar — e derrapa
+      b.heading = turnToward(b.heading, want, 1.1, dt);
+    }
   } else {
     target = 0;
     if (b.modeT <= 0) { b.mode = 'stalk'; b.modeT = 3.5 + rand() * 2; }
@@ -1034,8 +1039,13 @@ function updateBoss(dt) {
   const accel = b.mode === 'charge' ? 70 : 26;
   b.speed += clamp(target - b.speed, -60 * dt, accel * dt);
   const oldH = b.heading;
-  b.x += Math.sin(b.heading) * b.speed * dt;
-  b.z += Math.cos(b.heading) * b.speed * dt;
+  // traseira de verdade: moveH persegue heading num teto menor;
+  // a diferenca entre os dois EH o deslize (aparece em curva fechada)
+  const turnRateNow = b.mode === 'charge' ? 1.1 : (b.mode === 'telegraph' ? 2.4 : 1.5);
+  const bLag = 0.55 + (b.mode === 'charge' ? 0.45 : 0.25);
+  b.moveH = turnToward(b.moveH, b.heading, turnRateNow * bLag, dt);
+  b.x += Math.sin(b.moveH) * b.speed * dt;
+  b.z += Math.cos(b.moveH) * b.speed * dt;
   if (Math.abs(b.x) > WORLD_BOUND) { b.x = Math.sign(b.x) * WORLD_BOUND; b.speed *= 0.3; }
   if (Math.abs(b.z) > WORLD_BOUND) { b.z = Math.sign(b.z) * WORLD_BOUND; b.speed *= 0.3; }
   const halfW = 3.0, halfD = 5.6;
@@ -1222,7 +1232,7 @@ function visitChime() {
 function pickupBlip() { tone(560, 0.14, { freqEnd: 1120, gain: 0.06 }); }
 function comboBlip(combo) { tone(480 + combo * 90, 0.07, { gain: 0.05 }); }
 
-const state = { speed: 0, heading: 0, steer: 0, slip: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, nitro: 1, boosting: false, started: false, startTime: 0, finished: false, bossActive: false };
+const state = { speed: 0, heading: 0, steer: 0, slip: 0, moveH: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, nitro: 1, boosting: false, started: false, startTime: 0, finished: false, bossActive: false };
 const stats = { accel: 1, max: 34, grip: 1 };
 car.position.set(0, 0, -34);
 car.rotation.y = 0;
@@ -1557,22 +1567,24 @@ function update(dt) {
     const speedFactor = Math.min(1, Math.abs(state.speed) / 12);
     const steerTarget = steerInput * speedFactor * (hbNow ? 1.3 : 1);
     state.steer += (steerTarget - state.steer) * Math.min(1, dt * 8);
-    state.heading += state.steer * 2.15 * stats.grip * (hbNow ? 1.35 : 1) * dt * Math.sign(state.speed || 1);
+    const maxTurn = (hbNow ? 3.4 : 2.4) * stats.grip * dt;
+    state.heading += clamp(state.steer * 2.15 * stats.grip * (hbNow ? 1.35 : 1) * dt * Math.sign(state.speed || 1), -maxTurn, maxTurn);
   } else {
     state.speed *= Math.exp(-FRICTION * dt);
     state.boosting = false;
   }
 
-  // deriva lateral: a frente (visao) gira mais rapido que a direcao real do movimento
+  // escorregao real: moveH (trajetoria) persegue heading (frente) com atraso = deslize;
+  // moveH anda na velocidade do giro da frente limitada pelo grip dos pneus
   const spd = Math.abs(state.speed);
-  const driftAmt = hbNow ? 0.85 : clamp((spd - 14) / 18, 0, 0.7);
-  const slide = clamp(state.steer, -1, 1) * driftAmt * Math.sign(state.speed || 1);
-  state.slip += (slide - state.slip) * Math.min(1, dt * (hbNow ? 7 : 5));
-  if (!active) state.slip *= Math.exp(-4 * dt);
-  const moveH = state.heading - state.slip * 0.5;
-  car.position.x += Math.sin(moveH) * state.speed * dt;
-  car.position.z += Math.cos(moveH) * state.speed * dt;
-  car.rotation.y = state.heading + state.slip * 0.28;
+  const tireGrip = (hbNow ? 0.85 : Math.max(2.5, 9 - spd * 0.16)) * dt;
+  const sDiff = Math.atan2(Math.sin(state.heading - state.moveH), Math.cos(state.heading - state.moveH));
+  state.slip = sDiff;
+  state.moveH += Math.max(-tireGrip, Math.min(tireGrip, sDiff));
+  if (active) state.speed *= Math.exp(-Math.min(Math.abs(sDiff), 1.2) * (hbNow ? 1.6 : 0.7) * dt);
+  car.position.x += Math.sin(state.moveH) * state.speed * dt;
+  car.position.z += Math.cos(state.moveH) * state.speed * dt;
+  car.rotation.y = state.heading;
 
   const accelNow = (state.speed - prevSpeed) / Math.max(dt, 0.001);
   prevSpeed = state.speed;
@@ -1678,7 +1690,8 @@ function update(dt) {
   }
 
   const drifting = (Math.abs(state.steer) > 0.45 && Math.abs(state.speed) > 14) ||
-    (hbNow && Math.abs(state.steer) > 0.15 && Math.abs(state.speed) > 7);
+    (hbNow && Math.abs(state.steer) > 0.15 && Math.abs(state.speed) > 7) ||
+    (Math.abs(state.slip) > 0.45 && Math.abs(state.speed) > 8);
   if (active) {
     if (drifting && !state.airborne && state.y < 0.2) {
       const prevCombo = scoreState.combo;
@@ -1931,7 +1944,7 @@ if (params.has('debug')) {
     setCar: (x, z, h, s) => {
       car.position.x = x; car.position.z = z;
       state.y = 0; state.vy = 0; state.airborne = false;
-      if (h !== undefined) state.heading = h;
+      if (h !== undefined) { state.heading = h; state.moveH = h; state.slip = 0; }
       if (s !== undefined) state.speed = s;
     },
     carState: () => [car.position.x, car.position.z, state.y, state.vy, state.airborne],

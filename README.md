@@ -51,9 +51,9 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
 - **Chefão final: SEGV** — complete os 13 repos e libere o duelo no botão
   "ENFRENTAR O CHEFÃO": telegrafa, carga e janela de vulnerabilidade, 3
   corações contra 100 de vida em 90 s (atalho: `?boss=1`)
-- **Derrapagem lateral de verdade** — em curva forte (ou freio de mão) a
-  traseira escapa para o lado: frente e trajetória divergem, com fumaça,
-  marcas de pneu e pontos valendo dobrado no freio de mão
+- **Derrapagem lateral de verdade** — física com trajetória atrasada: a traseira
+  escapa para o lado com inércia e atrito (não só visual), o carro perde
+  velocidade no deslize e o chefão SEGV também derrapa fechando curva
 - **Trânsito com colisão**: carros circulam pelas avenidas e te atrapalham
 - **Rampas com física de pulo**: decole, voe e aterrisse com fumaça (o salto
   só dispara no sentido de subida — o paredão segura o carro como um muro,
