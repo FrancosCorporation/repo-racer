@@ -1,0 +1,8 @@
+services:
+  repo-racer:
+    build: .
+    image: repo-racer:local
+    container_name: repo-racer
+    ports:
+      - "8080:80"
+    restart: unless-stopped
