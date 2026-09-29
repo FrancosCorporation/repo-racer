@@ -796,10 +796,10 @@ let loopBestShown = false; // garante 1 toast por recorde (reset no restart)
 const loopCoins = [];
 const LOOP_BEST_KEY = 'francos-repo-racer-loopbest';
 /* --- LOOPING estilo Hot Wheels ---
-   Um tubo em circulo completo (raio R, centro a R do chao): quem entra com
-   velocidade percorre o laco de cabeco, quem vai devagar despenca no ponto
-   critico (v^2 < g*R) e cai no chao. A fisica e o mesmo groundHeightAt do
-   jogador: alturas continuas, sem teleporte. Entrada/saida no ponto sul. */
+   Pista de ENTRADA com guard-rails e boost pads que garantem a velocidade
+   minima, tubo circular com CASCA SOLIDA (quem vai devagar bate e e jogado
+   de volta — ninguem atravessa a estrutura), e boca de SAIDA com portal
+   neon. Entrada pelo sul, saida pelo norte. */
 const LOOP = { x: 36, z: 36, R: 11, W: 9 };
 {
   const cy = LOOP.R; // centro do laco: o ponto de baixo encosta no chao (y=0)
@@ -824,16 +824,24 @@ const LOOP = { x: 36, z: 36, R: 11, W: 9 };
   tube.receiveShadow = true;
   scene.add(tube);
 
-  // bordas neon de cada boca do tubo (elas ficam alinhadas no eixo X)
+  // bordas neon de cada boca do tubo (elas ficam alinhadas no eixo X):
+  // a do sul e a ENTRADA, a do norte fica acesa so depois da 1a volta
+  const edgeMats = [];
   for (const side of [-1, 1]) {
-    const edge = new THREE.Mesh(
-      new THREE.TorusGeometry(LOOP.R, 0.18, 8, 48),
-      new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 2.6, toneMapped: false })
-    );
+    const em = new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 2.6, toneMapped: false });
+    const edge = new THREE.Mesh(new THREE.TorusGeometry(LOOP.R, 0.18, 8, 48), em);
     edge.rotation.y = Math.PI / 2;
     edge.position.set(LOOP.x + side * (LOOP.W / 2), cy, LOOP.z);
     scene.add(edge);
+    edgeMats.push(em);
   }
+  // grade que FECHA a boca de saida ate a primeira volta do passeio
+  const gate = new THREE.Mesh(
+    new THREE.BoxGeometry(LOOP.W, LOOP.R * 1.9, 0.16),
+    new THREE.MeshStandardMaterial({ color: 0x0c1622, metalness: 0.85, roughness: 0.3, emissive: 0x0a2a3a, emissiveIntensity: 0.5, transparent: true, opacity: 0.55 })
+  );
+  gate.position.set(LOOP.x, cy + 0.2, LOOP.z + LOOP.W / 2 + 0.1);
+  scene.add(gate);
 
   // pilares de apoio: 3 colunas finas do centro ate o chao + bases com luz
   const pilarMat = new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.6, metalness: 0.6 });
@@ -852,7 +860,7 @@ const LOOP = { x: 36, z: 36, R: 11, W: 9 };
     scene.add(base);
   }
 
-  // setas no chao indicando a entrada
+  // setas no chao indicando a entrada (pista ao sul da boca)
   const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffb300, toneMapped: false, transparent: true, opacity: 0.85 });
   for (let k = 0; k < 3; k++) {
     const arr = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2.6, 3), arrowMat);
@@ -862,13 +870,94 @@ const LOOP = { x: 36, z: 36, R: 11, W: 9 };
     scene.add(arr);
   }
 
-  // altura do piso interno perto do ponto mais baixo (entrada): faixa estreita
-  // para o carro alinhar com a boca do tubo sem degraus; o resto e o passeio
+  /* --- PISTA DE ENTRADA estilo Hot Wheels (ao sul, sobe ate a boca) ---
+     Deck em rampa suave + guard-rails laranja + 2 boost pads: alinhar com a
+     boca e chegar a ~velocidade de entrada virou coisa de pista, nao de sorte */
+  {
+    const rampLen = 16, rampH = 0.55;
+    const deckShape = new THREE.Shape();
+    deckShape.moveTo(-rampLen / 2, 0);
+    deckShape.lineTo(rampLen / 2, 0);
+    deckShape.lineTo(rampLen / 2, rampH);
+    deckShape.closePath();
+    const deckGeo = new THREE.ExtrudeGeometry(deckShape, { depth: LOOP.W - 1, bevelEnabled: false });
+    deckGeo.translate(0, 0, -(LOOP.W - 1) / 2);
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0x1a2434, roughness: 0.6, metalness: 0.5, emissive: 0x0a2030, emissiveIntensity: 0.45 });
+    const deck = new THREE.Mesh(deckGeo, deckMat);
+    deck.position.set(LOOP.x, 0.01, LOOP.z - 3 - rampLen / 2);
+    deck.rotation.y = Math.PI; // face alta voltada para a boca do tubo
+    deck.castShadow = true;
+    deck.receiveShadow = true;
+    scene.add(deck);
+    // guard-rails laranja dos dois lados do deck (estilo pista de brinquedo)
+    const railMat = new THREE.MeshStandardMaterial({ color: 0xff8c1a, roughness: 0.5, metalness: 0.4, emissive: 0xff8c1a, emissiveIntensity: 0.55 });
+    for (const sx of [-1, 1]) {
+      const railGeo = new THREE.BoxGeometry(0.16, 0.5, rampLen);
+      const rail = new THREE.Mesh(railGeo, railMat);
+      rail.position.set(LOOP.x + sx * ((LOOP.W - 1) / 2 + 0.08), rampH / 2 + 0.22, LOOP.z - 3 - rampLen / 2);
+      rail.castShadow = true;
+      scene.add(rail);
+    }
+    // faixas amarelas do deck
+    for (let k = 0; k < 4; k++) {
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 1.4), arrowMat);
+      stripe.position.set(LOOP.x, rampH * ((k + 0.5) / 4) + 0.03, LOOP.z - 5.5 - k * 3.6);
+      scene.add(stripe);
+    }
+  }
+  // letreiros ENTRADA (sul) e SAIDA (norte) em pylons neon
+  const makeLoopSign = (txt, colorHex, zz) => {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 64;
+    const cx = cv.getContext('2d');
+    cx.fillStyle = 'rgba(8,12,22,0.92)';
+    cx.fillRect(0, 0, 256, 64);
+    cx.strokeStyle = '#' + colorHex.toString(16).padStart(6, '0');
+    cx.lineWidth = 4;
+    cx.strokeRect(4, 4, 248, 56);
+    cx.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
+    cx.font = 'bold 40px "Segoe UI", Arial, sans-serif';
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText(txt, 128, 35);
+    const signTex = new THREE.CanvasTexture(cv);
+    signTex.colorSpace = THREE.SRGBColorSpace;
+    const sm = new THREE.MeshBasicMaterial({ map: signTex, transparent: true, toneMapped: false, side: THREE.DoubleSide });
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 1.8), sm);
+    sign.position.set(LOOP.x, 4.3, zz);
+    scene.add(sign);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 4.3, 8), pilarMat || new THREE.MeshStandardMaterial({ color: 0x1a2230 }));
+    post.position.set(LOOP.x + 2.8, 2.15, zz + 0.3);
+    scene.add(post);
+    const post2 = post.clone();
+    post2.position.x = LOOP.x - 2.8;
+    scene.add(post2);
+  };
+  makeLoopSign('ENTRADA', 0xffb300, LOOP.z - 21.5);
+  makeLoopSign('SAIDA', 0x39ff88, LOOP.z + 21.5);
+  // boost pads na pista de entrada: 2 setas de energia que garantem oNeedV
+  var loopBoostPads = [
+    { z: LOOP.z - 17.5, used: 0 },
+    { z: LOOP.z - 12.5, used: 0 }
+  ];
+  for (const pad of loopBoostPads) {
+    const padMesh = new THREE.Mesh(new THREE.PlaneGeometry(LOOP.W - 2.2, 3),
+      new THREE.MeshBasicMaterial({ color: 0x00e5ff, toneMapped: false, transparent: true, opacity: 0.28 }));
+    padMesh.rotation.x = -Math.PI / 2;
+    padMesh.position.set(LOOP.x, 0.035, pad.z);
+    scene.add(padMesh);
+    pad.mesh = padMesh;
+  }
+
+  // piso interno do tubo ao longo de TODO o laco (o passeio usa); fora do
+  // passeio o chao ignora o tubo (da pra passar por BAIXO da estrutura)
   loopGround = (x, z) => {
     if (Math.abs(x - LOOP.x) > LOOP.W / 2) return -1;
     const dzz = z - LOOP.z;
-    if (Math.abs(dzz) > 3) return -1;
-    return LOOP.R - Math.sqrt(LOOP.R * LOOP.R - dzz * dzz);
+    const rr = Math.hypot(0, dzz);
+    if (rr > LOOP.R + 0.5) return -1; // fora da projecao do tubo
+    const hh = LOOP.R - Math.sqrt(Math.max(0, LOOP.R * LOOP.R - Math.min(dzz * dzz, LOOP.R * LOOP.R)));
+    return hh;
   };
   // coletaveis DENTRO do laco: 8 orbes no mesmo caminho do passeio — valer
   // +200 cada obriga a entrar no tubo so pra faze-los
