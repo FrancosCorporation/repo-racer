@@ -1,28 +1,35 @@
 # Repo Racer
 
-## 🐳 Instalação e Execução (Docker) — recomendado
+## 🚀 Rodar o jogo
 
-### Pré-requisitos
-- [Docker](https://docs.docker.com/get-docker/) + Docker Compose
+Não existe etapa de build: o jogo inteiro é o `index.html` (Three.js vem por CDN).
 
-### Rodar com Docker
+### Sem Docker (mais simples)
 ```bash
-docker compose up --build
+git clone https://github.com/FrancosCorporation/repo-racer.git
+cd repo-racer
+python3 -m http.server 8080   # abra http://localhost:8080
 ```
-Para servir via container:
+Também funciona abrindo o arquivo direto: `open index.html`.
+
+### Com Docker (opcional, só para servir o estático em nginx)
 ```bash
-docker run --rm -p 8080:80 -v $(pwd):/usr/share/nginx/html:ro nginx:alpine
+docker compose up --build     # abra http://localhost:8080
+```
+Sem compose, com a imagem oficial na mão:
+```bash
+docker run --rm -p 8080:80 -v "$PWD":/usr/share/nginx/html:ro nginx:alpine
 ```
 
-### Sem Docker (local)
-```bash
-# abre o index.html no navegador
-open index.html
-```
+> Docker aqui é **apenas um servidor web** para os arquivos estáticos
+> (`Dockerfile` + `docker-compose.yml` + `docker/nginx.conf`) — não é build de
+> aplicação, porque não há bundler, dependências npm nem transpilação.
 
 Jogo 3D no navegador em que você dirige por uma cidade neon e **explora os
 repositórios** da FrancosCorporation: cada praça iluminada é um projeto — pare
-em cima, veja a descrição e pressione **E** para abrir no GitHub.
+em cima, veja a descrição e pressione **E** para abrir no GitHub. Nos
+**círculos de fase** espalhados pela cidade os mesmos botões aceitam desafios:
+aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
 
 [![Jogar](https://img.shields.io/badge/JOGAR-agora-39ff88?style=for-the-badge&logo=github&logoColor=white)](https://francoscorporation.github.io/repo-racer/)
 ![Three.js](https://img.shields.io/badge/Three.js-r160-000000?style=flat-square&logo=threedotjs)
@@ -54,17 +61,28 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
 - **Derrapagem lateral de verdade** — física com trajetória atrasada: a traseira
   escapa para o lado com inércia e atrito (não só visual), o carro perde
   velocidade no deslize e o chefão SEGV também derrapa fechando curva
-- **Trânsito com colisão**: carros circulam pelas avenidas e te atrapalham
+- **Fases em círculos**: cinco arenas circulares com desafios próprios e
+  desbloqueio por pontuação (veja [Fases](#fases))
+- **Trânsito com colisão**: carros circulam pelas avenidas e te atrapalham —
+  agora com rodas, cabine escura e faixa de vidro, e **sem escalar as rampas**
+  (as faixas foram para fora do vão das rampas e o trânsito ignora o relevo)
 - **Rampas com física de pulo**: decole, voe e aterrisse com fumaça (o salto
   só dispara no sentido de subida — o paredão segura o carro como um muro,
-  inclusive de marcha à ré)
+  inclusive de marcha à ré e **chegando pelo ar**; atacar pela lateral ou por
+  trás **não atravessa** a rampa, o carro bate e para na face)
+- **Orla sólida**: os prédios do skyline no fim das avenidas agora têm colisão —
+  não dá mais para entrar no meio deles
 - **Som procedural** (WebAudio, sem arquivos): motor que responde à
   velocidade, cantada de pneu na derrapagem, chime ao visitar um repositório,
   blip de coleta e batida — mute com `M`
 - **Marcas de derrapagem**, fumaça nos pneus e shake de câmera
 - **Missão e cronômetro**: explore os 13 projetos, veja seu tempo, sua
   pontuação e o recorde salvo no navegador
-- **Minimapa** em tempo real com praças, rampas, trânsito e sua posição
+- **Visual mais rico**: prédios com tons variados e **coroa neon no topo**,
+  placas luminosas nas fachadas, **guias neon nas bordas das ruas**, pintura com
+  verniz (clearcoat), rodas com aro de 5 raios e fita de neon nas saias do carro
+- **Minimapa** em tempo real com praças, rampas, trânsito, fases (anel amarelo =
+  bloqueada, verde = concluída) e rivais da caçada
 - **HUD** com velocidade, nitro, pontos/combo, progresso e painel do repositório
 - **Controles de toque** para celular (com botão DERRAPA) e **suporte a
   gamepad** (analógico + botões)
@@ -80,7 +98,7 @@ em cima, veja a descrição e pressione **E** para abrir no GitHub.
 | Virar | `A` `D` / `←` `→` |
 | Freio de mão | `Espaço` |
 | Nitro | `Shift` |
-| Abrir o repositório | `E` |
+| Abrir o repositório / começar a fase | `E` |
 | Ligar/desligar som | `M` |
 | Gamepad | analógico + botões (A = acelerar, B = frear, R1 = nitro, LB = freio de mão) |
 
@@ -89,11 +107,37 @@ mostra quantos repositórios você já visitou — complete os 13 para fechar a
 missão. Derrapar, coletar N2O e visitar repositórios pontuam: façam o maior
 recorde de pontos antes que o tempo acabe.
 
+## Fases
+
+Espalhados pela cidade existem **cinco círculos de fase**. Chegue em cima de um
+deles: o HUD mostra o desafio e **E** (ou o toque em *começar o desafio*) troca a
+exploração pelo desafio. Cada fase tem objetivo, cronômetro e recompensa
+próprios, e as seguintes **abrem conforme a sua pontuação**.
+
+| # | Fase | Tipo | Objetivo | Libera com |
+|---|---|---|---|---|
+| 1 | AQUECIMENTO | derrapagem | 600 pontos de drift em 60 s | sempre aberta |
+| 2 | CIRCUITO NEON | portais | passar pelos 5 portais em ordem | 1.500 pts |
+| 3 | ZONA DE DRIFT | pista que solta | 1.500 pontos dentro do círculo | 4.000 pts |
+| 4 | CAÇADA | rivais | aguentar 50 s (3 vidas) ou destruir os 3 rivais | 8.000 pts |
+| 5 | SEGV // ARENA | chefão | derrotar SEGV no centro da cidade | 15.000 pts |
+
+- O desbloqueio olha a **melhor pontuação** (a que fica salva no navegador), então
+  a progressão continua entre partidas; as fases concluídas ficam em
+  `francos-repo-racer-phases` (`localStorage`).
+- Fases concluídas podem ser **repetidas** — a recompensa vale de novo.
+- Na **zona de drift** o chão solta de verdade (aderência reduzida) e o combo
+  sobe sem precisar do freio de mão; fora do círculo não conta.
+- Na **caçada**, bata nos rivais enquanto eles estão em *recuperação* para
+destruí-los (+350 cada) — fora dessa janela você perde uma vida.
+- Na **arena**, espere SEGV entrar em recuperação e arremesse o carro nele.
+- Atalho para testar uma fase: `index.html?phase=p3` (ou `?phase=3`).
+
 ## O Chefão
 
-Depois de explorar os 13 repositórios, o botão **ENFRENTAR O CHEFÃO** libera o
-duelo final contra **SEGV**, a máquina caçadora. Atalho direto para o combate:
-`index.html?boss=1`.
+A fase 5 é o duelo contra **SEGV**, a máquina caçadora — o mesmo combate que
+abre no botão **ENFRENTAR O CHEFÃO** depois de explorar os 13 repositórios.
+Atalho direto para o combate: `index.html?boss=1`.
 
 - SEGV **persegue**, **telegrafa** (olho piscando + beep) e parte para a
   **carga** — mais rápida que o seu carro; desvie!
@@ -116,6 +160,11 @@ https://francoscorporation.github.io/repo-racer/
   sprites, pós-processamento (bloom)
 - **WebAudio** — som do motor e dos pneus gerado em tempo real
 - **HTML/CSS/JS puro** — sem build, sem dependências instaladas
+- **Debugar fácil**: com `?debug=1` o console ganha `window.__rr` para dirigir a
+  cena em testes (`setCar`, `setAir`, `step`, `carState`, `startPhase`,
+  `phaseState`, `phaseStatus`, `enemies`, `startBoss`, `getBoss`, `damageBoss`,
+  `hurtPlayer`, `bossEnd`, `resetScore`, `resetProgress`, `keys`, `traffic`,
+  `buildings`)
 - **GitHub Pages** — hospedagem estática
 
 ## Rodar localmente
@@ -128,8 +177,11 @@ python3 -m http.server 8080
 ## Estrutura
 
 ```
-index.html   # o jogo inteiro (cena, física arcade, áudio, HUD, controles)
-preview.png  # screenshot usado no README
+index.html            # o jogo inteiro (cena, física arcade, áudio, HUD, controles)
+preview.png           # screenshot usado no README
+Dockerfile            # nginx:alpine servindo os estáticos (sem build de app)
+docker-compose.yml    # atalho: docker compose up --build na porta 8080
+docker/nginx.conf     # config do nginx do container
 ```
 
 ## Licença

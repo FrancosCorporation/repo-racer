@@ -58,8 +58,27 @@
   #pad.show { opacity: 1; }
   #pad h2 { margin: 0 0 4px; font-size: 17px; color: var(--cyan); text-shadow: 0 0 14px rgba(0,229,255,.7); }
   #pad p { margin: 0 0 8px; font-size: 12px; color: #cfe6f5; }
-  #pad .key { display: inline-block; padding: 2px 8px; margin-right: 6px; border: 1px solid var(--green); border-radius: 6px; color: var(--green); font-size: 12px; }
-  #pad .open { color: var(--green); font-size: 12px; pointer-events: auto; cursor: pointer; }
+  #pad .key, #phase .key { display: inline-block; padding: 2px 8px; margin-right: 6px; border: 1px solid var(--green); border-radius: 6px; color: var(--green); font-size: 12px; }
+  #pad .open, #phase .open { color: var(--green); font-size: 12px; pointer-events: auto; cursor: pointer; }
+  #phase {
+    left: 50%; bottom: 108px; transform: translateX(-50%);
+    min-width: 400px; max-width: 92vw; text-align: center;
+    opacity: 0; transition: opacity .18s ease; border-color: rgba(255, 45, 149, .45);
+  }
+  #phase.show { opacity: 1; }
+  #phase h2 { margin: 0 0 4px; font-size: 18px; letter-spacing: 2px; color: var(--magenta); text-shadow: 0 0 16px rgba(255,45,149,.8); }
+  #phase p { margin: 0 0 6px; font-size: 12px; color: #cfe6f5; }
+  #phase .lock { font-size: 12px; color: #ffb300; margin-bottom: 6px; }
+  #phase .lock.ready { color: var(--green); }
+  #challenge { top: 14px; left: 50%; transform: translateX(-50%); min-width: 380px; display: none; border-color: rgba(255, 45, 149, .45); }
+  #challenge.show { display: block; }
+  #challenge .row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: #9fb8cc; margin-top: 3px; }
+  #challenge .pname { font-size: 14px; letter-spacing: 2px; color: var(--magenta); text-shadow: 0 0 12px rgba(255,45,149,.8); }
+  #challenge .goal { font-size: 12px; color: #cfe6f5; margin-top: 3px; }
+  #challenge .prog { color: var(--green); }
+  #challenge .time { color: #ffd54f; font-size: 15px; text-shadow: 0 0 10px rgba(255,213,79,.6); }
+  #challenge .bar { margin-top: 6px; height: 8px; background: rgba(255,255,255,.08); border-radius: 4px; overflow: hidden; }
+  #challenge .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, #ff2d95, #ffd54f); }
   #start {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
     flex-direction: column; gap: 12px;
@@ -98,6 +117,21 @@
   }
   #done button#done-boss { display: none; border-color: #ff5470; color: #ff5470; box-shadow: 0 0 18px rgba(255,45,85,.25); }
   #done button#done-retry { display: none; border-color: var(--green); color: var(--green); }
+  #phase-end {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column;
+    gap: 10px; background: rgba(4,6,15,.86); z-index: 38; text-align: center; padding: 20px;
+  }
+  #phase-end.show { display: flex; }
+  #phase-end .big { font-size: 32px; letter-spacing: 6px; color: var(--green); text-shadow: 0 0 30px rgba(57,255,136,.8); }
+  #phase-end .big.fail { color: #ff4757; text-shadow: 0 0 30px rgba(255,45,85,.8); }
+  #phase-end .sub { font-size: 14px; color: #cfe6f5; max-width: 620px; line-height: 1.6; }
+  #phase-end .reward { font-size: 15px; color: #ffd54f; text-shadow: 0 0 12px rgba(255,213,79,.6); }
+  #phase-end .btns { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
+  #phase-end button {
+    padding: 10px 24px; border-radius: 10px; cursor: pointer; font-family: inherit; font-size: 14px;
+    border: 1px solid var(--cyan); background: transparent; color: var(--cyan);
+  }
+  #phase-end button#pe-retry { border-color: var(--green); color: var(--green); }
   .tbtn {
     position: fixed; bottom: 22px; width: var(--tbtn); height: var(--tbtn); border-radius: 50%;
     border: 1px solid rgba(0,229,255,.5); background: rgba(4,7,18,.6); color: var(--cyan);
@@ -111,7 +145,7 @@
   #t-brake { right: calc(18px + var(--tbtn) + 14px); }
   #t-nitro { right: calc(18px + 2 * (var(--tbtn) + 14px)); font-size: clamp(13px, 1.8vw, 18px); letter-spacing: 1px; }
   #t-hb { left: 50%; bottom: 18px; transform: translateX(-50%); width: calc(var(--tbtn) * 1.5); border-radius: 999px; font-size: clamp(12px, 1.6vw, 16px); letter-spacing: 1px; }
-  @media (pointer: coarse) { .tbtn { display: flex; } #minimap { top: auto; bottom: 170px; } #pad { bottom: calc(var(--tbtn) + 32px); } }
+  @media (pointer: coarse) { .tbtn { display: flex; } #minimap { top: auto; bottom: 170px; } #pad { bottom: calc(var(--tbtn) + 32px); } #phase { bottom: calc(var(--tbtn) + 108px); } }
 </style>
 </head>
 <body>
@@ -119,7 +153,7 @@
   <div id="title" class="box">
     <h1>REPO RACER</h1>
     <p>Dirija e explore os repositorios da <b>FrancosCorporation</b>.</p>
-    <p><b>WASD</b> dirigir &middot; <b>Shift</b> nitro &middot; <b>Espaco</b> derrapa &middot; <b>E</b> abre o repo &middot; <b>M</b> som</p>
+    <p><b>WASD</b> dirigir &middot; <b>Shift</b> nitro &middot; <b>Espaco</b> derrapa &middot; <b>E</b> abre o repo / entra na fase &middot; <b>M</b> som</p>
   </div>
   <div id="stats" class="box">
     <div>EXPLORADOS <span class="big" id="visited">0</span>/<span id="total">0</span></div>
@@ -144,6 +178,18 @@
     <p id="pad-desc"></p>
     <span class="key">E</span> <span class="open" id="pad-open">abrir no GitHub</span>
   </div>
+  <div id="phase" class="box">
+    <h2 id="phase-name"></h2>
+    <p id="phase-desc"></p>
+    <div class="lock" id="phase-lock"></div>
+    <span class="key">E</span> <span class="open" id="phase-go">comecar o desafio</span>
+  </div>
+  <div id="challenge" class="box">
+    <div class="row"><span class="pname" id="ch-name">FASE</span><span class="time" id="ch-time">0:00</span></div>
+    <div class="goal" id="ch-goal"></div>
+    <div class="row"><span id="ch-lives"></span><span class="prog" id="ch-prog"></span></div>
+    <div class="bar"><div id="ch-bar"></div></div>
+  </div>
   <div id="toast"></div>
 </div>
 <div id="touch">
@@ -157,7 +203,9 @@
 <div id="start">
   <div class="logo">REPO RACER</div>
   <div class="tag">Uma cidade neon para explorar os repositorios da FrancosCorporation.
-    Cada praca iluminada e um projeto: pare em cima, leia o banner e aperte <b>E</b> para abrir no GitHub.</div>
+    Cada praca iluminada e um projeto: pare em cima, leia o banner e aperte <b>E</b> para abrir no GitHub.<br>
+    Os <b>circulos de fase</b> espalhados pela cidade liberam desafios: aquecimento, circuito de portais, zona de drift, caca e o chefao.
+    Cada fase libera a proxima conforme a sua pontuacao. Passe em cima e aperte <b>E</b> para aceitar.</div>
   <div id="garage"></div>
   <div class="cta" id="go">DIRIGIR</div>
   <div class="keys">WASD / setas &middot; shift nitro &middot; espaco derrapa &middot; E abre o repo &middot; M som</div>
@@ -171,6 +219,15 @@
   <button id="done-retry">TENTAR DE NOVO</button>
   <button id="again">JOGAR DE NOVO</button>
   <a href="https://github.com/FrancosCorporation" target="_blank" rel="noopener">ABRIR O PERFIL</a>
+</div>
+<div id="phase-end">
+  <div class="big" id="pe-title">FASE COMPLETA</div>
+  <div class="sub" id="pe-sub"></div>
+  <div class="reward" id="pe-reward"></div>
+  <div class="btns">
+    <button id="pe-retry">TENTAR DE NOVO</button>
+    <button id="pe-close">SAIR</button>
+  </div>
 </div>
 
 <script type="importmap">
@@ -395,6 +452,20 @@ roadTexV.repeat.set(1, 12);
 roadTexH.repeat.set(12, 1);
 const roadMatV = new THREE.MeshStandardMaterial({ map: roadTexV, roughness: 0.85, metalness: 0.12, envMapIntensity: 0.6 });
 const roadMatH = new THREE.MeshStandardMaterial({ map: roadTexH, roughness: 0.85, metalness: 0.12, envMapIntensity: 0.6 });
+// guias neon nas bordas das ruas: dao profundidade e guiam o olho pela cidade
+const curbMat = new THREE.MeshBasicMaterial({ color: 0x0d5f78, toneMapped: false });
+const curbGeoNS = new THREE.BoxGeometry(0.32, 0.07, 480);
+const curbGeoEW = new THREE.BoxGeometry(480, 0.07, 0.32);
+for (const r of ROADS) {
+  for (const side of [-1, 1]) {
+    const ns = new THREE.Mesh(curbGeoNS, curbMat);
+    ns.position.set(r + side * 5.9, 0.035, 0);
+    scene.add(ns);
+    const ew = new THREE.Mesh(curbGeoEW, curbMat);
+    ew.position.set(0, 0.035, r + side * 5.9);
+    scene.add(ew);
+  }
+}
 for (const r of ROADS) {
   const v = new THREE.Mesh(new THREE.PlaneGeometry(12, 480), roadMatV);
   v.rotation.x = -Math.PI / 2;
@@ -433,19 +504,42 @@ function makeWindowTexture() {
   return tex;
 }
 const windowTextures = Array.from({ length: 5 }, makeWindowTexture);
-const buildingMats = windowTextures.map((tex) => new THREE.MeshStandardMaterial({
-  color: 0x11161f, roughness: 0.8, metalness: 0.25,
-  map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.5, envMapIntensity: 0.5
+// tonalidades variadas de concreto/vidro + janelas mais vivas = skyline menos monotona
+const BUILDING_TINTS = [0x11161f, 0x1a1522, 0x101c24, 0x1d1526, 0x121a2c, 0x0f1b1a, 0x1c1a14, 0x141c28];
+const buildingMats = BUILDING_TINTS.map((tint, i) => new THREE.MeshStandardMaterial({
+  color: tint, roughness: 0.68, metalness: 0.4,
+  map: windowTextures[i % windowTextures.length], emissiveMap: windowTextures[i % windowTextures.length],
+  emissive: 0xffffff, emissiveIntensity: 0.62, envMapIntensity: 0.75
 }));
 
 const RAMP_DEFS = [[0, -100, -Math.PI / 2], [0, 100, Math.PI / 2], [-100, 0, 0], [100, 0, Math.PI]];
 const buildings = [];
+const neonMats = [0x00e5ff, 0xff2d95, 0xffd54f, 0x7c4dff, 0x39ff88, 0xff7043].map(
+  (c) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false })
+);
+const unitBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+const signGeo = new THREE.PlaneGeometry(1, 1);
+// escolha estavel por posicao: nao consome rand() e nao muda o layout da cidade
+const hashPick = (x, z, len) => Math.abs(Math.floor(x * 7919 + z * 104729 + Math.abs(x * z) * 31)) % len;
 function addBuilding(x, z, w, d, h) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), buildingMats[Math.floor(rand() * buildingMats.length)]);
   mesh.position.set(x, h / 2, z);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   scene.add(mesh);
+  // coroa neon no topo + placa vertical luminosa de vez em quando
+  const neon = neonMats[hashPick(x, z, neonMats.length)];
+  const cap = new THREE.Mesh(unitBoxGeo, neon);
+  cap.scale.set(w * 1.04, 0.26, d * 1.04);
+  cap.position.set(x, h + 0.02, z);
+  scene.add(cap);
+  if (!LOW_END && h > 13 && hashPick(z, x, 3) === 0) {
+    const sign = new THREE.Mesh(signGeo, neon);
+    sign.position.set(x + w * 0.5 + 0.07, h * 0.58, z);
+    sign.rotation.y = Math.PI / 2;
+    sign.scale.set(Math.min(d * 0.8, 4.4), Math.min(h * 0.55, 8), 1);
+    scene.add(sign);
+  }
   buildings.push({ x, z, w, d, h });
 }
 const BLOCKS = [];
@@ -467,6 +561,7 @@ const ringGeo = new THREE.BoxGeometry(1, 1, 1);
 const ringMat = new THREE.MeshStandardMaterial({ color: 0x0d1320, roughness: 0.85, metalness: 0.2, emissive: 0x0a2030, emissiveIntensity: 0.6 });
 const RING_COUNT = 110;
 const ringMesh = new THREE.InstancedMesh(ringGeo, ringMat, RING_COUNT);
+const ringCap = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), RING_COUNT);
 const ringColor = new THREE.Color();
 const dummy = new THREE.Object3D();
 for (let i = 0; i < RING_COUNT; i++) {
@@ -478,13 +573,27 @@ for (let i = 0; i < RING_COUNT; i++) {
   dummy.rotation.y = rand() * Math.PI;
   dummy.updateMatrix();
   ringMesh.setMatrixAt(i, dummy.matrix);
+  // predios da orla sao solidos: caixa alinhada equivalente a caixa rotacionada
+  const rot = dummy.rotation.y;
+  const ex = (w * Math.abs(Math.cos(rot)) + d * Math.abs(Math.sin(rot))) / 2;
+  const ez = (w * Math.abs(Math.sin(rot)) + d * Math.abs(Math.cos(rot))) / 2;
+  buildings.push({ x: dummy.position.x, z: dummy.position.z, w: ex * 2, d: ez * 2, h });
   const pal = [0x1e6f9f, 0x00e5ff, 0xff2d95, 0x7c4dff, 0x39ff88];
   ringColor.set(pal[Math.floor(rand() * pal.length)]);
   ringMesh.setColorAt(i, ringColor);
+  // coroa neon no topo dos predios da orla (mesmas matrizes, so mais fina e no alto)
+  dummy.position.y = h + 0.05;
+  dummy.scale.set(w * 1.03, 0.34, d * 1.03);
+  dummy.updateMatrix();
+  ringCap.setMatrixAt(i, dummy.matrix);
+  ringCap.setColorAt(i, ringColor);
 }
 ringMesh.instanceMatrix.needsUpdate = true;
 if (ringMesh.instanceColor) ringMesh.instanceColor.needsUpdate = true;
 scene.add(ringMesh);
+ringCap.instanceMatrix.needsUpdate = true;
+if (ringCap.instanceColor) ringCap.instanceColor.needsUpdate = true;
+scene.add(ringCap);
 
 const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff2cc, emissive: 0xffd27a, emissiveIntensity: 3.2 });
 const poleMat = new THREE.MeshStandardMaterial({ color: 0x1c2530, roughness: 0.6, metalness: 0.5 });
@@ -506,7 +615,7 @@ for (const r of ROADS) {
 
 const ramps = [];
 for (const [rx, rz, rotY] of RAMP_DEFS) {
-  const L = 13, H = 2.7, W = 8;
+  const L = 13, H = 2.7, W = 5;
   const shape = new THREE.Shape();
   shape.moveTo(-L / 2, 0);
   shape.lineTo(L / 2, 0);
@@ -536,9 +645,9 @@ function rampAt(x, z) {
   }
   return null;
 }
-function groundHeightAt(x, z) {
+function groundHeightAt(x, z, ignoreRamps = false) {
   let h = 0;
-  for (const r of ramps) {
+  if (!ignoreRamps) for (const r of ramps) {
     const dx = x - r.x, dz = z - r.z;
     const lx = dx * Math.cos(r.rotY) - dz * Math.sin(r.rotY);
     const lz = dx * Math.sin(r.rotY) + dz * Math.cos(r.rotY);
@@ -551,6 +660,23 @@ function groundHeightAt(x, z) {
     if (Math.hypot(x - p.x, z - p.z) <= PAD_RADIUS) h = Math.max(h, PAD_TOP);
   }
   return h;
+}
+// tira o carro de dentro do volume solido da rampa pelo caminho mais curto
+// (rede de seguranca para quando algo empurrou o carro pra dentro do solido)
+function unstickRamp(r, x, z) {
+  const dx = x - r.x, dz = z - r.z;
+  let lx = dx * Math.cos(r.rotY) - dz * Math.sin(r.rotY);
+  let lz = dx * Math.sin(r.rotY) + dz * Math.cos(r.rotY);
+  const hl = r.L / 2 + 0.5, hw = r.W / 2 + 1.6;
+  const outHigh = hl - lx, outLow = lx + hl, outSide = hw - Math.abs(lz);
+  const min = Math.min(outHigh, outLow, outSide);
+  if (min === outSide) lz = Math.sign(lz || 1) * hw;
+  else if (min === outLow) lx = -hl;
+  else lx = hl;
+  return [
+    r.x + lx * Math.cos(r.rotY) + lz * Math.sin(r.rotY),
+    r.z - lx * Math.sin(r.rotY) + lz * Math.cos(r.rotY)
+  ];
 }
 
 function wrapText(ctx, text, maxWidth) {
@@ -665,11 +791,596 @@ REPOS.forEach((repo, i) => {
   pads.push({ i, x, z, ring, group, banner, repo, visited: false, bannerScale: 1 });
 });
 
+/* ==========================================================================
+   FASES — circulos de desafio espalhados pela cidade.
+   Chegue em cima do circulo e aperte E: cada fase roda um desafio diferente
+   (derrapagem, circuito de portais, zona que solta o chao, caca e chefao).
+   As fases seguintes abrem conforme a sua pontuacao.
+   ========================================================================== */
+const PHASES = [
+  {
+    id: 'p1', name: 'AQUECIMENTO', type: 'drift', x: -40, z: 40, radius: 12, color: 0x39ff88,
+    unlock: 0, time: 60, goal: 600, reward: 800,
+    desc: 'Faca 600 pontos de derrapagem em 60s. Fase tranquila pra pegar o jeito.'
+  },
+  {
+    id: 'p2', name: 'CIRCUITO NEON', type: 'gates', x: -120, z: -120, radius: 12, color: 0x00e5ff,
+    unlock: 1500, time: 85, reward: 1500,
+    gates: [[160, 120], [80, 160], [0, 80], [80, 0], [0, -80]],
+    desc: 'Passe pelos 5 portais na ordem antes do tempo acabar.'
+  },
+  {
+    id: 'p3', name: 'ZONA DE DRIFT', type: 'ring', x: 120, z: -120, radius: 24, color: 0xff2d95,
+    unlock: 4000, time: 60, goal: 1500, reward: 2500,
+    desc: 'Dentro do circulo o chao solta de vez: some 1500 pontos de combo.'
+  },
+  {
+    id: 'p4', name: 'CACADA', type: 'chase', x: 0, z: 180, radius: 12, color: 0xff7043,
+    unlock: 8000, time: 50, lives: 3, enemies: 3, reward: 3500,
+    desc: 'Aguente 50s com 3 rivais na sua cola. Bata neles na recuperacao pra destruir.'
+  },
+  {
+    id: 'p5', name: 'SEGV // ARENA', type: 'boss', x: 0, z: 0, radius: 17, color: 0xff1733,
+    unlock: 15000, reward: 5000,
+    desc: 'O chefe espera no centro da cidade. Derrote SEGV na arena.'
+  }
+];
+const PHASE_KEY = 'francos-repo-racer-phases';
+let phaseDone = [];
+try {
+  const raw = JSON.parse(localStorage.getItem(PHASE_KEY) || '[]');
+  if (Array.isArray(raw)) phaseDone = raw;
+} catch (e) {
+  phaseDone = [];
+}
+function savePhaseDone() {
+  try { localStorage.setItem(PHASE_KEY, JSON.stringify(phaseDone)); } catch (e) { /* sem storage */ }
+}
+// melhor pontuacao fica em cache: phaseStatus e chamado todo frame e nao pode
+// ler o localStorage varias vezes por frame
+let bestScoreCached = -1;
+function phaseScore() {
+  if (bestScoreCached < 0) bestScoreCached = Number(localStorage.getItem(SCORE_KEY) || 0) || 0;
+  return Math.max(scoreState.total + scoreState.chain, bestScoreCached);
+}
+function phaseUnlocked(def) { return phaseScore() >= def.unlock || phaseDone.includes(def.id); }
+
+const phaseState = { active: false, phase: null, def: null, t: 0, progress: 0, lives: 0, gate: 0, inside: true, hintT: 0 };
+let activePhaseZone = null;
+
+function makePhaseDiscTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const c = size / 2;
+  ctx.translate(c, c);
+  for (let i = 1; i <= 5; i++) {
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,255,255,' + (i % 2 ? '0.5' : '0.22') + ')';
+    ctx.lineWidth = i % 2 ? 3 : 2;
+    ctx.arc(0, 0, (c - 12) * (i / 5), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 48; i++) {
+    const a = (i / 48) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,255,255,' + (i % 4 === 0 ? '0.7' : '0.26') + ')';
+    ctx.lineWidth = i % 4 === 0 ? 4 : 2;
+    ctx.moveTo(Math.cos(a) * (c - 28), Math.sin(a) * (c - 28));
+    ctx.lineTo(Math.cos(a) * (c - 8), Math.sin(a) * (c - 8));
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  for (let i = 0; i <= 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+    const r = (c - 46) * 0.74;
+    if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  ctx.closePath();
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, c);
+  grad.addColorStop(0, 'rgba(255,255,255,0.30)');
+  grad.addColorStop(0.62, 'rgba(255,255,255,0.05)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(-c, -c, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+const phaseDiscTex = makePhaseDiscTexture();
+
+function drawPhaseBanner(ctx, def, index, status) {
+  const W = 1024, H = 384;
+  const hex = '#' + new THREE.Color(def.color).getHexString();
+  ctx.clearRect(0, 0, W, H);
+  const r = 28;
+  ctx.beginPath();
+  ctx.moveTo(r, 0); ctx.lineTo(W - r, 0); ctx.quadraticCurveTo(W, 0, W, r);
+  ctx.lineTo(W, H - r); ctx.quadraticCurveTo(W, H, W - r, H);
+  ctx.lineTo(r, H); ctx.quadraticCurveTo(0, H, 0, H - r);
+  ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(4, 8, 20, 0.93)';
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = status === 'locked' ? '#7a5a1e' : hex;
+  ctx.stroke();
+  ctx.fillStyle = hex;
+  ctx.fillRect(0, 0, 16, H);
+
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 26px Consolas, monospace';
+  ctx.fillStyle = 'rgba(159, 184, 204, 0.9)';
+  ctx.fillText('FASE ' + String(index + 1).padStart(2, '0') + '/' + String(PHASES.length).padStart(2, '0'), W - 34, 54);
+
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 58px Consolas, monospace';
+  ctx.shadowColor = hex;
+  ctx.shadowBlur = 26;
+  ctx.fillStyle = status === 'locked' ? '#9aa7b4' : '#f4fbff';
+  ctx.fillText(def.name.length > 17 ? def.name.slice(0, 16) + '...' : def.name, 46, 110);
+  ctx.shadowBlur = 0;
+
+  ctx.font = '30px Consolas, monospace';
+  ctx.fillStyle = '#cfe6f5';
+  wrapText(ctx, def.desc, W - 120).slice(0, 2).forEach((line, i) => ctx.fillText(line, 46, 178 + i * 42));
+
+  const statusTxt = status === 'locked' ? 'BLOQUEADA · REQUER ' + def.unlock + ' PTS'
+    : status === 'done' ? 'COMPLETA · PODE REPETIR'
+    : status === 'running' ? 'EM ANDAMENTO'
+    : 'DISPONIVEL · APERTE E';
+  ctx.font = 'bold 28px Consolas, monospace';
+  ctx.fillStyle = status === 'locked' ? '#ffb300' : status === 'done' ? '#39ff88' : status === 'running' ? '#ff2d95' : '#7ef0ff';
+  ctx.fillText(statusTxt, 46, H - 40);
+  ctx.font = '28px Consolas, monospace';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffd54f';
+  ctx.fillText('+' + def.reward + ' pts', W - 42, H - 40);
+  ctx.textAlign = 'left';
+}
+
+const phases = [];
+PHASES.forEach((def, i) => {
+  const group = new THREE.Group();
+  group.position.set(def.x, 0, def.z);
+
+  const disc = new THREE.Mesh(
+    new THREE.CircleGeometry(def.radius, 64),
+    new THREE.MeshBasicMaterial({
+      map: phaseDiscTex, color: def.color, transparent: true, opacity: 0.5,
+      depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending
+    })
+  );
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = 0.05;
+  group.add(disc);
+
+  const ringMat = new THREE.MeshStandardMaterial({ color: def.color, emissive: def.color, emissiveIntensity: 2.6, toneMapped: false });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(def.radius, 0.24, 12, 96), ringMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.14;
+  group.add(ring);
+
+  const inner = new THREE.Mesh(
+    new THREE.TorusGeometry(def.radius * 0.63, 0.1, 8, 72, Math.PI * 1.45),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: def.color, emissiveIntensity: 2.2, toneMapped: false, transparent: true, opacity: 0.9 })
+  );
+  inner.rotation.x = Math.PI / 2;
+  inner.position.y = 0.18;
+  group.add(inner);
+
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(def.radius * 0.72, def.radius * 0.96, 72, 24, 1, true),
+    new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false, toneMapped: false })
+  );
+  beam.position.y = 36;
+  group.add(beam);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024; canvas.height = 384;
+  const bctx = canvas.getContext('2d');
+  const btex = new THREE.CanvasTexture(canvas);
+  btex.colorSpace = THREE.SRGBColorSpace;
+  btex.anisotropy = 8;
+  const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: btex, transparent: true, depthWrite: false, toneMapped: false, opacity: 0.9 }));
+  banner.scale.set(15, 5.6, 1);
+  banner.position.y = 8.4;
+  group.add(banner);
+
+  scene.add(group);
+  // banner e cores sao desenhados no primeiro updatePhases (scoreState ainda nao existe aqui)
+  phases.push({ def, i, group, disc, ring, inner, beam, banner, bctx, btex, spin: 0, lastStatus: null, lastLook: null });
+});
+
+function refreshPhaseBanner(p) {
+  drawPhaseBanner(p.bctx, p.def, p.i, phaseStatus(p));
+  p.btex.needsUpdate = true;
+}
+
+function applyPhaseLook(p) {
+  const st = phaseStatus(p);
+  if (p.lastLook === st) return;
+  p.lastLook = st;
+  const c = st === 'locked' ? 0x6b5222 : st === 'done' ? 0x39ff88 : p.def.color;
+  p.ring.material.color.set(c);
+  p.ring.material.emissive.set(c);
+  p.inner.material.emissive.set(c);
+  p.beam.material.color.set(c);
+  p.disc.material.color.set(c);
+  p.disc.material.opacity = st === 'locked' ? 0.16 : 0.5;
+}
+
+function phaseStatus(p) {
+  if (phaseState.active && phaseState.phase === p) return 'running';
+  if (phaseDone.includes(p.def.id)) return 'done';
+  return phaseScore() >= p.def.unlock ? 'open' : 'locked';
+}
+
+/* --- portais da fase de circuito --- */
+const gateGroup = new THREE.Group();
+scene.add(gateGroup);
+const gateMeshes = [];
+function buildGates(def) {
+  clearGates();
+  for (const [gx, gz] of def.gates) {
+    const mat = new THREE.MeshStandardMaterial({ color: def.color, emissive: def.color, emissiveIntensity: 1, toneMapped: false, transparent: true, opacity: 0.45 });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(5.2, 0.3, 10, 48), mat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(gx, 0.16, gz);
+    gateGroup.add(ring);
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(4.4, 5.0, 46, 20, 1, true),
+      new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.04, side: THREE.DoubleSide, depthWrite: false, toneMapped: false })
+    );
+    beam.position.set(gx, 23, gz);
+    gateGroup.add(beam);
+    gateMeshes.push({ ring, beam, mat, x: gx, z: gz });
+  }
+  setGateActive(0);
+}
+function clearGates() {
+  gateGroup.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) o.material.dispose();
+  });
+  gateGroup.clear();
+  gateMeshes.length = 0;
+}
+function setGateActive(i) {
+  gateMeshes.forEach((g, j) => {
+    const on = j === i;
+    g.mat.emissiveIntensity = on ? 4.4 : 0.9;
+    g.mat.opacity = on ? 1 : 0.32;
+    g.beam.material.opacity = on ? 0.13 : 0.02;
+  });
+}
+
+/* --- rivais da fase de caca --- */
+const enemies = [];
+const ENEMY_SPEED = { stalk: 22, telegraph: 4, charge: 38, recover: 2 };
+function makeEnemyCar() {
+  const g = makeTrafficCar(0xff2d55);
+  const stripe = new THREE.Mesh(
+    new THREE.BoxGeometry(1.84, 0.12, 3.3),
+    new THREE.MeshStandardMaterial({ color: 0x1a0006, emissive: 0xff2d55, emissiveIntensity: 2.6, toneMapped: false })
+  );
+  stripe.position.y = 0.95;
+  g.add(stripe);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: redGlowTex, transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false }));
+  halo.scale.set(4.4, 4.4, 1);
+  halo.position.y = 1.2;
+  g.add(halo);
+  const light = new THREE.PointLight(0xff2d55, 3, 18, 2);
+  light.position.y = 1.4;
+  g.add(light);
+  scene.add(g);
+  return g;
+}
+function spawnEnemies(def) {
+  clearEnemies();
+  const n = def.enemies || 3;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + 0.4;
+    const dist = def.radius + 30;
+    const x = def.x + Math.sin(a) * dist;
+    const z = def.z + Math.cos(a) * dist;
+    const mesh = makeEnemyCar();
+    mesh.position.set(x, 0, z);
+    const heading = a + Math.PI;
+    mesh.rotation.y = heading;
+    enemies.push({ mesh, x, z, heading, moveH: heading, speed: 0, hp: 3, mode: 'stalk', modeT: 2.4 + i * 0.8, hitCd: 0, alive: true, lean: 0, flashT: 0 });
+  }
+}
+function clearEnemies() {
+  for (const e of enemies) scene.remove(e.mesh);
+  enemies.length = 0;
+}
+function hurtPlayerInPhase() {
+  if (invulnT > 0) return;
+  invulnT = 1.6;
+  phaseState.lives = Math.max(0, phaseState.lives - 1);
+  state.speed = -Math.abs(state.speed) * 0.3 - 3;
+  shake = 1;
+  thud();
+  toast('RIVAL NA SUA COLA!  -1 VIDA', '#ff5470');
+}
+function updateEnemies(dt) {
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    e.hitCd = Math.max(0, e.hitCd - dt);
+    e.flashT = Math.max(0, e.flashT - dt);
+    const dx = car.position.x - e.x, dz = car.position.z - e.z;
+    const dist = Math.hypot(dx, dz) || 0.001;
+    const want = Math.atan2(dx, dz);
+    e.modeT -= dt;
+    let turn = 1.7, accel = 30;
+    if (e.mode === 'stalk') {
+      if (e.modeT <= 0) { e.mode = 'telegraph'; e.modeT = 0.8; tone(660, 0.1, { gain: 0.05 }); }
+    } else if (e.mode === 'telegraph') {
+      turn = 2.6;
+      if (e.modeT <= 0) { e.mode = 'charge'; e.modeT = 1.5; e.heading = want; }
+    } else if (e.mode === 'charge') {
+      turn = 1.2; accel = 70;
+      if (e.modeT <= 0) { e.mode = 'recover'; e.modeT = 2.2; }
+    } else if (e.modeT <= 0) {
+      e.mode = 'stalk';
+      e.modeT = 3 + rand() * 2;
+    }
+    const target = ENEMY_SPEED[e.mode];
+    e.heading = turnToward(e.heading, want, turn, dt);
+    e.speed += clamp(target - e.speed, -70 * dt, accel * dt);
+    e.moveH = turnToward(e.moveH, e.heading, turn * 0.6, dt);
+    e.x += Math.sin(e.moveH) * e.speed * dt;
+    e.z += Math.cos(e.moveH) * e.speed * dt;
+    if (Math.abs(e.x) > WORLD_BOUND) { e.x = Math.sign(e.x) * WORLD_BOUND; e.speed *= 0.3; }
+    if (Math.abs(e.z) > WORLD_BOUND) { e.z = Math.sign(e.z) * WORLD_BOUND; e.speed *= 0.3; }
+    for (const bl of buildings) {
+      const px = e.x - bl.x, pz = e.z - bl.z;
+      const ox = 1.6 + bl.w / 2 - Math.abs(px);
+      const oz = 2.4 + bl.d / 2 - Math.abs(pz);
+      if (ox > 0 && oz > 0) {
+        if (ox < oz) e.x = bl.x + Math.sign(px || 1) * (1.6 + bl.w / 2);
+        else e.z = bl.z + Math.sign(pz || 1) * (2.4 + bl.d / 2);
+        e.speed *= 0.3;
+        break;
+      }
+    }
+    const hd = Math.atan2(Math.sin(e.heading - e.moveH), Math.cos(e.heading - e.moveH));
+    e.lean += (clamp(hd * 1.6, -0.2, 0.2) - e.lean) * Math.min(1, dt * 5);
+    e.mesh.position.set(e.x, 0, e.z);
+    e.mesh.rotation.y = e.heading;
+    e.mesh.rotation.z = -e.lean;
+    if (e.flashT > 0) e.mesh.position.y = 0.12 + Math.sin(e.flashT * 60) * 0.06;
+    if (dist < 3.6 && e.hitCd <= 0) {
+      e.hitCd = 0.9;
+      const nx = dx / dist, nz = dz / dist;
+      car.position.x += nx * (3.6 - dist);
+      car.position.z += nz * (3.6 - dist);
+      if (e.mode === 'recover') {
+        e.hp -= 1;
+        e.flashT = 0.3;
+        scoreState.total += 350;
+        state.speed *= 0.7;
+        shake = Math.min(1, shake + 0.4);
+        thud();
+        if (e.hp <= 0) {
+          e.alive = false;
+          e.mesh.visible = false;
+          spawnSmoke(e.x, e.z);
+          toast('RIVAL DESTRUIDO!  +350', '#ffd54f');
+        } else {
+          toast('RIVAL VULNERAVEL!  +350');
+        }
+      } else {
+        hurtPlayerInPhase();
+      }
+    }
+  }
+}
+
+/* --- fluxo das fases --- */
+const challengeEl = document.getElementById('challenge');
+const phasePanel = document.getElementById('phase');
+const phaseNameEl = document.getElementById('phase-name');
+const phaseDescEl = document.getElementById('phase-desc');
+const phaseLockEl = document.getElementById('phase-lock');
+const chNameEl = document.getElementById('ch-name');
+const chGoalEl = document.getElementById('ch-goal');
+const chTimeEl = document.getElementById('ch-time');
+const chProgEl = document.getElementById('ch-prog');
+const chLivesEl = document.getElementById('ch-lives');
+const chBarEl = document.getElementById('ch-bar');
+const phaseEndEl = document.getElementById('phase-end');
+const peTitleEl = document.getElementById('pe-title');
+const peSubEl = document.getElementById('pe-sub');
+const peRewardEl = document.getElementById('pe-reward');
+
+function nearestPhase() {
+  let best = null, bd = Infinity;
+  for (const p of phases) {
+    const d = Math.hypot(car.position.x - p.def.x, car.position.z - p.def.z);
+    if (d < p.def.radius + 3 && d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+
+function startPhase(p) {
+  if (!p || phaseState.active) return;
+  if (state.bossActive) { toast('TERMINE O COMBATE PRIMEIRO!', '#ff5470'); return; }
+  const def = p.def;
+  if (!phaseUnlocked(def)) {
+    toast('FASE BLOQUEADA — ' + def.unlock + ' PONTOS', '#ffb300');
+    thud();
+    return;
+  }
+  phaseState.active = true;
+  phaseState.phase = p;
+  phaseState.def = def;
+  phaseState.t = def.time || 60;
+  phaseState.progress = 0;
+  phaseState.lives = def.lives || 0;
+  phaseState.gate = 0;
+  phaseState.inside = true;
+  phaseState.hintT = 0;
+  activePhaseZone = null;
+  phasePanel.classList.remove('show');
+  refreshPhaseBanner(p);
+  if (def.type === 'boss') {
+    startBoss();
+    return;
+  }
+  challengeEl.classList.add('show');
+  if (def.type === 'gates') buildGates(def);
+  if (def.type === 'chase') spawnEnemies(def);
+  toast('FASE: ' + def.name, '#ff2d95');
+  tone(520, 0.18, { gain: 0.07 });
+  tone(780, 0.22, { gain: 0.07, delay: 0.14 });
+}
+
+function endPhase(win, reason) {
+  if (!phaseState.active) return;
+  const p = phaseState.phase;
+  const def = phaseState.def;
+  phaseState.active = false;
+  clearGates();
+  clearEnemies();
+  challengeEl.classList.remove('show');
+  const reward = win ? (def.reward || 0) : 0;
+  if (win) {
+    scoreState.total += reward;
+    if (!phaseDone.includes(def.id)) { phaseDone.push(def.id); savePhaseDone(); }
+  }
+  bankScore();
+  peTitleEl.textContent = win ? 'FASE COMPLETA' : 'FASE FALHOU';
+  peTitleEl.classList.toggle('fail', !win);
+  peSubEl.textContent = reason || '';
+  peRewardEl.textContent = win
+    ? '+' + reward + ' pontos  ·  total ' + Math.round(scoreState.total)
+    : 'total ' + Math.round(scoreState.total);
+  phaseEndEl.classList.add('show');
+  if (p) refreshPhaseBanner(p);
+  if (win) {
+    visitChime();
+    tone(1180, 0.22, { type: 'triangle', gain: 0.06, delay: 0.2 });
+  } else {
+    thud();
+  }
+}
+
+function updatePhases(dt) {
+  const now = performance.now();
+  for (const p of phases) {
+    applyPhaseLook(p);
+    const st = phaseStatus(p);
+    if (st !== p.lastStatus) {
+      p.lastStatus = st;
+      refreshPhaseBanner(p);
+    }
+    const running = st === 'running';
+    const near = p === activePhaseZone;
+    p.spin += dt * (running ? 2.4 : near ? 1.1 : 0.35);
+    p.inner.rotation.z = p.spin;
+    const pulse = 1 + Math.sin(now * 0.0022 + p.i) * (running ? 0.05 : 0.025);
+    p.ring.scale.set(pulse, pulse, 1);
+    p.ring.material.emissiveIntensity = running ? 5.6 : near ? 4 : st === 'locked' ? 1.1 : 2.6;
+    p.beam.material.opacity = running ? 0.12 : near ? 0.09 : st === 'locked' ? 0.03 : 0.06;
+    const bs = p === activePhaseZone ? 1.12 : 1;
+    p.banner.scale.set(15 * bs, 5.6 * bs, 1);
+    p.banner.material.opacity = near ? 1 : 0.85;
+  }
+
+  if (!phaseState.active) {
+    const near = nearestPhase();
+    if (near !== activePhaseZone) {
+      activePhaseZone = near;
+      if (near) {
+        const st = phaseStatus(near);
+        phaseNameEl.textContent = near.def.name;
+        phaseDescEl.textContent = near.def.desc + '  ·  recompensa ' + near.def.reward + ' pts';
+        phaseLockEl.textContent = st === 'locked'
+          ? 'BLOQUEADA — REQUER ' + near.def.unlock + ' PONTOS'
+          : st === 'done' ? 'JA CONCLUIDA — pode repetir' : 'DISPONIVEL';
+        phaseLockEl.classList.toggle('ready', st !== 'locked');
+        phasePanel.classList.add('show');
+      } else {
+        phasePanel.classList.remove('show');
+      }
+    }
+    return;
+  }
+
+  const def = phaseState.def;
+  phaseState.hintT = Math.max(0, phaseState.hintT - dt);
+  phaseState.t = Math.max(0, phaseState.t - dt);
+  if (def.type === 'ring') {
+    phaseState.inside = Math.hypot(car.position.x - def.x, car.position.z - def.z) <= def.radius;
+    if (!phaseState.inside && phaseState.hintT <= 0) {
+      toast('VOLTE PARA O CIRCULO!', '#ffb300');
+      phaseState.hintT = 2.5;
+    }
+  }
+  if (def.type === 'drift' || def.type === 'ring') {
+    if (phaseState.progress >= def.goal) {
+      endPhase(true, def.name + ' dominada com ' + Math.round(phaseState.progress) + ' pontos de derrapagem.');
+    } else if (phaseState.t <= 0) {
+      endPhase(false, 'O tempo acabou com ' + Math.round(phaseState.progress) + '/' + def.goal + ' pontos de derrapagem.');
+    }
+  } else if (def.type === 'gates') {
+    const g = def.gates[phaseState.gate];
+    if (g && Math.hypot(car.position.x - g[0], car.position.z - g[1]) < 7) {
+      phaseState.gate++;
+      scoreState.total += 250;
+      visitChime();
+      setGateActive(phaseState.gate);
+      toast('PORTAL ' + phaseState.gate + '/' + def.gates.length + '  +250', '#00e5ff');
+    }
+    if (phaseState.gate >= def.gates.length) {
+      endPhase(true, 'Todos os ' + def.gates.length + ' portais em ' + Math.round(def.time - phaseState.t) + 's.');
+    } else if (phaseState.t <= 0) {
+      endPhase(false, 'Faltaram ' + (def.gates.length - phaseState.gate) + ' portais.');
+    }
+  } else if (def.type === 'chase') {
+    updateEnemies(dt);
+    if (phaseState.lives <= 0) endPhase(false, 'Os rivais acabaram com voce. Tente de novo!');
+    else if (enemies.length && enemies.every((e) => !e.alive)) endPhase(true, 'Voce destruiu os ' + enemies.length + ' rivais!');
+    else if (phaseState.t <= 0) endPhase(true, 'Voce aguentou ' + def.time + 's de caca.');
+  } else if (def.type === 'boss') {
+    // a luta roda em updateBoss; se o SEGV for vencido fora da fase (?boss=1),
+    // a fase ficaria presa ativa para sempre — aqui ela tambem termina
+    if (!state.bossActive) {
+      const win = bossResult === 'win';
+      endPhase(win, win ? 'SEGV foi ao chao — arena dominada!' : 'SEGV sobreviveu. Tente de novo!');
+    }
+  }
+}
+
+function interact() {
+  if (phaseState.active) return;
+  if (activePhaseZone) { startPhase(activePhaseZone); return; }
+  openActive();
+}
+
+document.getElementById('phase-go').addEventListener('click', () => { if (activePhaseZone) startPhase(activePhaseZone); });
+document.getElementById('pe-retry').addEventListener('click', () => {
+  const p = phaseState.phase;
+  phaseEndEl.classList.remove('show');
+  if (p) startPhase(p);
+});
+document.getElementById('pe-close').addEventListener('click', () => phaseEndEl.classList.remove('show'));
+
 const car = new THREE.Group();
 const carBody = new THREE.Group();
 car.add(carBody);
 
-const paint = new THREE.MeshStandardMaterial({ color: 0x00d5ff, metalness: 0.85, roughness: 0.22, envMapIntensity: 1.4 });
+const paint = new THREE.MeshPhysicalMaterial({
+  color: 0x00d5ff, metalness: 0.85, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.7
+});
 const paintDark = new THREE.MeshStandardMaterial({ color: 0x0a1c2c, metalness: 0.8, roughness: 0.3, envMapIntensity: 1.1 });
 const glass = new THREE.MeshStandardMaterial({ color: 0x0b1626, metalness: 0.95, roughness: 0.06, envMapIntensity: 1.6 });
 const trim = new THREE.MeshStandardMaterial({ color: 0x0d1117, metalness: 0.6, roughness: 0.5 });
@@ -705,20 +1416,44 @@ for (const sx of [-0.99, 0.99]) {
   skirt.position.set(sx, 0.34, 0);
   carBody.add(skirt);
 }
+// fita de neon nas saias laterais (a cor acompanha o carro escolhido)
+const underglowMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, toneMapped: false, transparent: true, opacity: 0.9 });
+for (const sx of [-1.02, 1.02]) {
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 2.4), underglowMat);
+  strip.position.set(sx, 0.22, 0);
+  carBody.add(strip);
+}
 
+// aro com 5 raios escuros sobre o disco claro + tampao luminoso no centro
+const spokeGeo = new THREE.BoxGeometry(0.05, 0.2, 0.055);
+const rimCapMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, toneMapped: false });
+const capGeo = new THREE.SphereGeometry(0.07, 10, 8);
 const wheels = [];
 for (const [wx, wz, front] of [[-1.0, 1.25, true], [1.0, 1.25, true], [-1.0, -1.25, false], [1.0, -1.25, false]]) {
   const pivot = new THREE.Group();
   pivot.position.set(wx, 0.38, wz);
+  const hub = new THREE.Group();
+  pivot.add(hub);
   const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.34, 22), tireMat);
   tire.rotation.z = Math.PI / 2;
   tire.castShadow = true;
-  pivot.add(tire);
+  hub.add(tire);
   const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.36, 14), rimMat);
   rim.rotation.z = Math.PI / 2;
-  pivot.add(rim);
+  hub.add(rim);
+  const outer = Math.sign(wx) * 0.19;
+  for (let s = 0; s < 5; s++) {
+    const a = (s / 5) * Math.PI * 2;
+    const spoke = new THREE.Mesh(spokeGeo, trim);
+    spoke.rotation.x = a;
+    spoke.position.set(outer, Math.cos(a) * 0.1, Math.sin(a) * 0.1);
+    hub.add(spoke);
+  }
+  const cap = new THREE.Mesh(capGeo, rimCapMat);
+  cap.position.x = outer;
+  hub.add(cap);
   carBody.add(pivot);
-  wheels.push({ pivot, tire, front });
+  wheels.push({ pivot, hub, tire, front });
 }
 
 const headMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 4, toneMapped: false });
@@ -790,17 +1525,39 @@ scene.add(contactBlob);
 
 scene.add(car);
 
+const trafficWheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.28, 12);
+trafficWheelGeo.rotateZ(Math.PI / 2);
+const trafficWheelMat = new THREE.MeshStandardMaterial({ color: 0x0a0c10, roughness: 0.95, metalness: 0.1 });
 function makeTrafficCar(color) {
   const group = new THREE.Group();
-  const paintMat = new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.35, envMapIntensity: 1.1 });
+  const paintMat = new THREE.MeshStandardMaterial({ color, metalness: 0.75, roughness: 0.3, envMapIntensity: 1.3 });
+  const roofMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.32), metalness: 0.6, roughness: 0.45 });
   const bodyMesh = new THREE.Mesh(new RoundedBoxGeometry(1.8, 0.6, 3.6, 3, 0.14), paintMat);
   bodyMesh.position.y = 0.62;
   bodyMesh.castShadow = true;
   group.add(bodyMesh);
-  const cab = new THREE.Mesh(new RoundedBoxGeometry(1.4, 0.5, 1.7, 3, 0.16), glass);
+  // cabine escura + faixa de vidro + teto: quebra o bloco liso de antes
+  const cab = new THREE.Mesh(new RoundedBoxGeometry(1.46, 0.52, 1.72, 3, 0.16), trim);
   cab.position.set(0, 1.12, -0.1);
   cab.castShadow = true;
   group.add(cab);
+  const windows = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.26, 1.5), glass);
+  windows.position.set(0, 1.2, -0.1);
+  group.add(windows);
+  const roof = new THREE.Mesh(new RoundedBoxGeometry(1.3, 0.08, 1.5, 2, 0.05), roofMat);
+  roof.position.set(0, 1.4, -0.12);
+  group.add(roof);
+  const grille = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.14, 0.08), trim);
+  grille.position.set(0, 0.62, 1.82);
+  group.add(grille);
+  const bumper = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.16, 0.12), roofMat);
+  bumper.position.set(0, 0.36, 1.8);
+  group.add(bumper);
+  for (const [wx, wz] of [[-0.84, 1.15], [0.84, 1.15], [-0.84, -1.15], [0.84, -1.15]]) {
+    const w = new THREE.Mesh(trafficWheelGeo, trafficWheelMat);
+    w.position.set(wx, 0.34, wz);
+    group.add(w);
+  }
   for (const hx of [-0.55, 0.55]) {
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.08), headMat);
     head.position.set(hx, 0.7, 1.82);
@@ -817,7 +1574,8 @@ for (let i = 0; i < 16; i++) {
   const mesh = makeTrafficCar(trafficColors[i % trafficColors.length]);
   const vertical = i % 2 === 0;
   const road = ROADS[Math.floor(rand() * ROADS.length)];
-  const lane = road + (rand() > 0.5 ? 3.2 : -3.2);
+  // pista das faixas fora do vao das rampas: o transito nunca pisa no vao solido
+  const lane = road + (rand() > 0.5 ? 4.6 : -4.6);
   const dir = rand() > 0.5 ? 1 : -1;
   if (vertical) {
     mesh.position.set(lane, 0, -220 + rand() * 440);
@@ -1000,6 +1758,13 @@ function bossEnd(win, reason) {
     ? 'Pontuacao: ' + sc + ' — novo recorde de pontos!'
     : 'Pontuacao: ' + sc + ' (recorde: ' + prevRec + ')';
   document.getElementById('done').classList.add('show');
+  // se a luta veio do circulo de fase, fecha a fase e libera as proximas
+  if (phaseState.active && phaseState.def && phaseState.def.type === 'boss') {
+    phaseState.active = false;
+    challengeEl.classList.remove('show');
+    if (win && !phaseDone.includes(phaseState.def.id)) { phaseDone.push(phaseState.def.id); savePhaseDone(); }
+    if (phaseState.phase) refreshPhaseBanner(phaseState.phase);
+  }
 }
 
 function updateBoss(dt) {
@@ -1278,7 +2043,7 @@ function pollGamepad() {
   pad.open = (gp.buttons[3] && gp.buttons[3].pressed) || (gp.buttons[9] && gp.buttons[9].pressed);
   if (pad.open && !pad.prevOpen) {
     if (!state.started) startGame();
-    else openActive();
+    else interact();
   }
   pad.prevOpen = pad.open;
 }
@@ -1302,6 +2067,8 @@ function applyCarChoice() {
   paint.color.set(c.color);
   paintDark.color.set(new THREE.Color(c.color).multiplyScalar(0.25));
   glow.color.set(c.glow);
+  underglowMat.color.set(c.glow);
+  rimCapMat.color.set(c.glow);
   stats.accel = c.accel;
   stats.max = c.max;
   stats.grip = c.grip;
@@ -1331,7 +2098,7 @@ window.addEventListener('keydown', (e) => {
   if (['ArrowRight', 'd', 'D'].includes(e.key)) keys.right = true;
   if (e.key === 'Shift') keys.nitro = true;
   if (e.key === ' ') keys.hb = true;
-  if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') openActive();
+  if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') interact();
   if (e.key === 'm' || e.key === 'M') {
     audio.muted = !audio.muted;
     document.getElementById('sound').textContent = 'som: ' + (audio.muted ? 'off' : 'on');
@@ -1409,6 +2176,7 @@ function bankScore() {
   scoreState.grace = 0;
   const best = Number(localStorage.getItem(SCORE_KEY) || 0);
   if (scoreState.total > best) localStorage.setItem(SCORE_KEY, String(scoreState.total));
+  bestScoreCached = Math.max(bestScoreCached, scoreState.total);
 }
 
 function onCrash() {
@@ -1468,6 +2236,19 @@ function drawMinimap() {
   for (const t of traffic) {
     mm.fillStyle = 'rgba(255,255,255,0.4)';
     mm.fillRect(mmX(t.mesh.position.x) - 1.5, mmY(t.mesh.position.z) - 1.5, 3, 3);
+  }
+  for (const p of phases) {
+    const st = phaseStatus(p);
+    mm.beginPath();
+    mm.arc(mmX(p.def.x), mmY(p.def.z), Math.max(4, p.def.radius * mmScale + 2), 0, Math.PI * 2);
+    mm.strokeStyle = st === 'locked' ? 'rgba(255,179,0,0.55)' : st === 'done' ? '#39ff88' : '#' + new THREE.Color(p.def.color).getHexString();
+    mm.lineWidth = st === 'running' ? 3 : 2;
+    mm.stroke();
+  }
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    mm.fillStyle = '#ff2d55';
+    mm.fillRect(mmX(e.x) - 3, mmY(e.z) - 3, 6, 6);
   }
   if (state.bossActive && boss && boss.alive) {
     mm.fillStyle = '#ff2d55';
@@ -1532,7 +2313,7 @@ function finishMission() {
 }
 
 function update(dt) {
-  const active = state.started && (!state.finished || state.bossActive);
+  const active = state.started && (!state.finished || state.bossActive || phaseState.active);
   crashCd = Math.max(0, crashCd - dt);
   invulnT = Math.max(0, invulnT - dt);
   bossHitCd = Math.max(0, bossHitCd - dt);
@@ -1577,11 +2358,14 @@ function update(dt) {
   // escorregao real: moveH (trajetoria) persegue heading (frente) com atraso = deslize;
   // moveH anda na velocidade do giro da frente limitada pelo grip dos pneus
   const spd = Math.abs(state.speed);
-  const tireGrip = (hbNow ? 0.85 : Math.max(2.5, 9 - spd * 0.16)) * dt;
+  // na zona de drift o chao solta: derrapa de verdade, sem precisar do freio de mao
+  const looseGround = phaseState.active && !!phaseState.def && phaseState.def.type === 'ring' && phaseState.inside;
+  const tireGrip = (hbNow ? 0.85 : Math.max(1.8, 6.5 - spd * 0.16)) * (looseGround ? 0.4 : 1) * dt;
   const sDiff = Math.atan2(Math.sin(state.heading - state.moveH), Math.cos(state.heading - state.moveH));
   state.slip = sDiff;
   state.moveH += Math.max(-tireGrip, Math.min(tireGrip, sDiff));
   if (active) state.speed *= Math.exp(-Math.min(Math.abs(sDiff), 1.2) * (hbNow ? 1.6 : 0.7) * dt);
+  const preX = car.position.x, preZ = car.position.z;
   car.position.x += Math.sin(state.moveH) * state.speed * dt;
   car.position.z += Math.cos(state.moveH) * state.speed * dt;
   car.rotation.y = state.heading;
@@ -1599,35 +2383,65 @@ function update(dt) {
   carBody.rotation.z = -state.steer * 0.07;
 
   const gh = groundHeightAt(car.position.x, car.position.z);
-  if (!state.airborne) {
+  const rc = rampAt(car.position.x, car.position.z);
+  const rise = gh - state.y; // quanto o chao esta acima do carro
+  // direcao de subida da rampa no mundo: local +x -> (cos rotY, -sin rotY);
+  // usa a direcao do MOVIMENTO (marcha a re tambem conta) e nao so o heading
+  let approach = 0;
+  if (rc) {
+    const sgn = state.speed >= 0 ? 1 : -1;
+    const mx = Math.sin(state.heading) * sgn, mz = Math.cos(state.heading) * sgn;
+    approach = mx * Math.cos(rc.rotY) - mz * Math.sin(rc.rotY);
+  }
+  // folga do passo: o que o carro sobe de fato andando na inclinacao, + a queda de um frame no ar
+  const slack = 0.35 + (state.airborne ? Math.abs(state.vy) * dt : 0);
+  const legalRise = rc ? (rc.H / rc.L) * spd * dt + slack : slack;
+  // so entra pela face de subida. Vale tambem NO AR: sem isso o carro pulava por dentro
+  // do paredao e o pouso teleportava ele pra cima da rampa.
+  const blocked = !!rc && rise > slack && !(approach > 0.25 && rise <= legalRise);
+  if (blocked) {
+    const prevRc = rampAt(preX, preZ);
+    const prevGh = groundHeightAt(preX, preZ);
+    if (prevRc && prevGh - state.y > slack + 0.05) {
+      // ja estava dentro do solido (empurrado por transito/rival): sai pelo caminho mais curto
+      const [sx, sz] = unstickRamp(prevRc, preX, preZ);
+      car.position.x = sx;
+      car.position.z = sz;
+      state.y = Math.min(state.y, groundHeightAt(sx, sz));
+    } else {
+      car.position.x = preX;
+      car.position.z = preZ;
+    }
+    if (rise > 1.2) {
+      state.speed *= 0.2; // bateu no paredao: para, nao sobe
+      onCrash();
+    } else {
+      state.speed *= 0.5; // raspou a lateral: segura sem lancar
+      shake = Math.min(1, shake + 0.2);
+    }
+    if (state.airborne) {
+      // bateu na face no ar: perde a subida e cai colado na parede
+      state.airborne = false;
+      state.vy = 0;
+      state.y = groundHeightAt(car.position.x, car.position.z);
+      shake = Math.min(1, shake + 0.35);
+    } else {
+      state.vy = 0;
+    }
+  } else if (!state.airborne) {
     if (gh > state.y - 0.02) {
       let v = (gh - state.y) / Math.max(dt, 0.001);
-      const rc = rampAt(car.position.x, car.position.z);
-      let blocked = false;
       if (rc) {
-        // direcao de subida da rampa no mundo: local +x -> (cos rotY, -sin rotY);
-        // usa a direcao do MOVIMENTO (marcha a re tambem conta) e nao so o heading
-        const sgn = state.speed >= 0 ? 1 : -1;
-        const mx = Math.sin(state.heading) * sgn, mz = Math.cos(state.heading) * sgn;
-        const approach = mx * Math.cos(rc.rotY) - mz * Math.sin(rc.rotY);
-        if (approach <= 0.25) {
-          if (gh - state.y > 1.2) {
-            state.speed *= 0.2; // bateu no paredão: para, não sobe
-            state.vy = 0;
-            onCrash();
-            blocked = true;
-          } else v = Math.min(v, 0); // lateral: sem lancamento
-        } else v *= approach;
+        if (approach <= 0.25) v = Math.min(v, 0); // degrau baixo: acompanha o chao, sem lancar
+        else v *= approach;
       }
-      if (!blocked) {
-        state.vy = clamp(v, -30, 10);
-        state.y = gh;
-      }
+      state.vy = clamp(v, -30, 10);
+      state.y = gh;
     } else if (state.y > gh + 0.05) {
       state.airborne = true;
     }
   }
-  if (state.airborne) {
+  if (state.airborne && !blocked) {
     state.vy -= 26 * dt;
     if (state.vy > 12) state.vy = 12; // rede de seguranca: nenhum salto legitimo passa de 10
     state.y += state.vy * dt;
@@ -1667,7 +2481,8 @@ function update(dt) {
     if (t.mesh.position.z < -230) t.mesh.position.z = 230;
     if (t.mesh.position.x > 230) t.mesh.position.x = -230;
     if (t.mesh.position.x < -230) t.mesh.position.x = 230;
-    const tgh = groundHeightAt(t.mesh.position.x, t.mesh.position.z);
+    // transito rola no chao: rampa nao levanta nem teleporta os carros de rua
+    const tgh = groundHeightAt(t.mesh.position.x, t.mesh.position.z, true);
     t.mesh.position.y += (tgh - t.mesh.position.y) * Math.min(1, dt * 8);
     if (state.y < 2.2) {
       const dx = car.position.x - t.mesh.position.x;
@@ -1685,12 +2500,13 @@ function update(dt) {
   }
 
   for (const w of wheels) {
-    w.tire.rotation.x += state.speed * dt * 2.6;
+    w.hub.rotation.x += state.speed * dt * 2.6;
     if (w.front) w.pivot.rotation.y = state.steer * 0.5;
   }
 
   const drifting = (Math.abs(state.steer) > 0.45 && Math.abs(state.speed) > 14) ||
     (hbNow && Math.abs(state.steer) > 0.15 && Math.abs(state.speed) > 7) ||
+    (looseGround && Math.abs(state.steer) > 0.12 && Math.abs(state.speed) > 8) ||
     (Math.abs(state.slip) > 0.45 && Math.abs(state.speed) > 8);
   if (active) {
     if (drifting && !state.airborne && state.y < 0.2) {
@@ -1698,7 +2514,9 @@ function update(dt) {
       scoreState.chainTime += dt;
       scoreState.grace = 1.4;
       scoreState.combo = Math.min(8, 1 + Math.floor(scoreState.chainTime / 2));
-      scoreState.chain += Math.abs(state.speed) * dt * 1.4 * scoreState.combo;
+      const gained = Math.abs(state.speed) * dt * 1.4 * scoreState.combo;
+      scoreState.chain += gained;
+      if (phaseState.active && (phaseState.def.type === 'drift' || (phaseState.def.type === 'ring' && phaseState.inside))) phaseState.progress += gained;
       if (scoreState.combo > prevCombo) comboBlip(scoreState.combo);
     } else if (scoreState.chain > 0) {
       scoreState.grace -= dt;
@@ -1779,7 +2597,26 @@ function update(dt) {
     if (pd < nd) { nd = pd; nt = p; }
   }
   wayTarget = nt;
-  if (state.bossActive && boss && boss.alive) {
+  if (phaseState.active && phaseState.def.type === 'chase' && enemies.length) {
+    let bestE = null, bestEd = Infinity;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const d = Math.hypot(e.x - car.position.x, e.z - car.position.z);
+      if (d < bestEd) { bestEd = d; bestE = e; }
+    }
+    if (bestE) {
+      wayTarget = { x: bestE.x, z: bestE.z };
+      wayLabel.textContent = 'RIVAL';
+      wayName.textContent = bestE.mode === 'recover' ? 'vulneravel — bata nele!' : 'rivais na sua cola';
+    }
+  } else if (phaseState.active && phaseState.def.type === 'gates') {
+    const g = phaseState.def.gates[phaseState.gate];
+    if (g) {
+      wayTarget = { x: g[0], z: g[1] };
+      wayLabel.textContent = 'PORTAL ' + (phaseState.gate + 1) + '/' + phaseState.def.gates.length;
+      wayName.textContent = 'siga o portal iluminado';
+    }
+  } else if (state.bossActive && boss && boss.alive) {
     wayTarget = { x: boss.x, z: boss.z };
     wayLabel.textContent = 'CHEFÃO';
     wayName.textContent = 'SEGV, o caçador';
@@ -1803,7 +2640,7 @@ function update(dt) {
         scoreState.total += 250;
         visitChime();
         toast('REPOSITORIO VISITADO  +250');
-        if (visitedCount === REPOS.length && !state.bossActive) finishMission();
+        if (visitedCount === REPOS.length && !state.bossActive && !phaseState.active) finishMission();
       }
     } else {
       padPanel.classList.remove('show');
@@ -1818,6 +2655,7 @@ function update(dt) {
   sun.target.position.set(car.position.x, 0, car.position.z);
   sun.target.updateMatrixWorld();
 
+  updatePhases(dt);
   updateAudio(FIXED_DT, drifting);
 }
 
@@ -1867,6 +2705,31 @@ function present(dt) {
     bossHeartsEl.textContent = '♥'.repeat(playerHp) + '♡'.repeat(Math.max(0, 3 - playerHp));
     const bt = Math.max(0, Math.ceil(bossTimer));
     bossTimeEl.textContent = Math.floor(bt / 60) + ':' + String(bt % 60).padStart(2, '0');
+  }
+  if (phaseState.active && phaseState.def) {
+    const def = phaseState.def;
+    chNameEl.textContent = def.name;
+    const bt = Math.max(0, Math.ceil(phaseState.t));
+    chTimeEl.textContent = bt >= 60 ? Math.floor(bt / 60) + ':' + String(bt % 60).padStart(2, '0') : '0:' + String(bt).padStart(2, '0');
+    if (def.type === 'drift' || def.type === 'ring') {
+      chGoalEl.textContent = def.type === 'ring'
+        ? (phaseState.inside ? 'Derrape dentro do circulo — o chao solta sozinho' : 'Volte para o circulo!')
+        : 'Derrape livre pela cidade: encere e segure o espaco';
+      chProgEl.textContent = Math.round(phaseState.progress) + ' / ' + def.goal + ' pts';
+      chBarEl.style.width = clamp(phaseState.progress / def.goal, 0, 1) * 100 + '%';
+      chLivesEl.textContent = 'combo x' + scoreState.combo;
+    } else if (def.type === 'gates') {
+      chGoalEl.textContent = 'Portal ' + Math.min(phaseState.gate + 1, def.gates.length) + ' de ' + def.gates.length + ' — siga a seta';
+      chProgEl.textContent = phaseState.gate + ' / ' + def.gates.length;
+      chBarEl.style.width = (phaseState.gate / def.gates.length) * 100 + '%';
+      chLivesEl.textContent = 'chegue no anel iluminado';
+    } else if (def.type === 'chase') {
+      const alive = enemies.filter((e) => e.alive).length;
+      chGoalEl.textContent = 'Aguente a caca — rivais vivos: ' + alive;
+      chProgEl.textContent = (enemies.length - alive) + ' / ' + enemies.length + ' destruidos';
+      chBarEl.style.width = clamp(1 - phaseState.t / def.time, 0, 1) * 100 + '%';
+      chLivesEl.textContent = '♥'.repeat(phaseState.lives) + '♡'.repeat(Math.max(0, 3 - phaseState.lives));
+    }
   }
   frameCount++;
   if (frameCount % 2 === 0) drawMinimap();
@@ -1935,6 +2798,7 @@ window.addEventListener('resize', () => {
 if (params.has('debug')) {
   window.__rr = {
     state,
+    keys,
     scoreState,
     startBoss,
     damageBoss,
@@ -1948,12 +2812,49 @@ if (params.has('debug')) {
       if (s !== undefined) state.speed = s;
     },
     carState: () => [car.position.x, car.position.z, state.y, state.vy, state.airborne],
+    setAir: (x, z, y, heading, speed) => {
+      car.position.x = x; car.position.z = z;
+      state.y = y; state.vy = 0; state.airborne = true;
+      if (heading !== undefined) { state.heading = heading; state.moveH = heading; state.slip = 0; }
+      if (speed !== undefined) state.speed = speed;
+    },
     carSlip: () => [state.slip, state.steer, state.speed, state.heading],
+    buildings,
+    traffic,
+    phases,
+    phaseState,
+    enemies,
+    startPhase: (id) => {
+      const p = phases.find((x) => x.def.id === id || x.def.name === String(id).toUpperCase());
+      if (p) startPhase(p);
+      return p ? p.def.id : null;
+    },
+    phaseStatus: (id) => {
+      const p = phases.find((x) => x.def.id === id);
+      return p ? phaseStatus(p) : null;
+    },
+    endPhase,
+    resetScore: () => {
+      // zera pontuacao E o recorde em cache: permite testar a progressao de fases
+      scoreState.total = 0; scoreState.chain = 0;
+      bestScoreCached = -1;
+      try { localStorage.removeItem(SCORE_KEY); } catch (e) { /* sem storage */ }
+    },
+    resetProgress: () => { phaseDone.length = 0; savePhaseDone(); },
+    clearTraffic: () => { for (const t of traffic) { t.speed = 0; t.mesh.position.set(200, 0, 200); } },
+    step: (n = 1) => { for (let i = 0; i < n; i++) { update(FIXED_DT); present(FIXED_DT); } },
   };
 }
 if (params.has('boss')) {
   startGame();
   startBoss();
+}
+if (params.has('phase')) {
+  const raw = params.get('phase') || 'p1';
+  const pid = /^\d+$/.test(raw) ? 'p' + raw : raw;
+  const target = phases.find((p) => p.def.id === pid || p.def.name === raw.toUpperCase());
+  startGame();
+  if (target) startPhase(target);
 }
 </script>
 </body>
