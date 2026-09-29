@@ -70,6 +70,16 @@
   #phase p { margin: 0 0 6px; font-size: 12px; color: #cfe6f5; }
   #phase .lock { font-size: 12px; color: #ffb300; margin-bottom: 6px; }
   #phase .lock.ready { color: var(--green); }
+  #phase .diff-row { display: flex; gap: 8px; justify-content: center; margin: 8px 0 10px; flex-wrap: wrap; }
+  #phase .diff {
+    font: inherit; font-size: 12px; letter-spacing: 1px; padding: 6px 14px;
+    border: 1px solid; border-radius: 8px; cursor: pointer;
+    background: rgba(4, 10, 22, 0.8); transition: transform .12s ease, background .12s ease;
+  }
+  #phase .diff:hover { transform: translateY(-1px); background: rgba(255,255,255,.14); }
+  #phase .diff.d0 { border-color: var(--green); color: var(--green); }
+  #phase .diff.d1 { border-color: #ffd54f; color: #ffd54f; }
+  #phase .diff.d2 { border-color: #ff5470; color: #ff5470; }
   #challenge { top: 14px; left: 50%; transform: translateX(-50%); min-width: 380px; display: none; border-color: rgba(255, 45, 149, .45); }
   #challenge.show { display: block; }
   #challenge .row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: #9fb8cc; margin-top: 3px; }
@@ -182,7 +192,12 @@
     <h2 id="phase-name"></h2>
     <p id="phase-desc"></p>
     <div class="lock" id="phase-lock"></div>
-    <span class="key">E</span> <span class="open" id="phase-go">comecar o desafio</span>
+    <div class="diff-row" id="diff-row">
+      <button class="diff d0" data-diff="0">FACIL · x1</button>
+      <button class="diff d1" data-diff="1">MEDIO · x2</button>
+      <button class="diff d2" data-diff="2">DIFICIL · x3</button>
+    </div>
+    <span class="key">E</span> <span class="open" id="phase-go">comecar no medio</span>
   </div>
   <div id="challenge" class="box">
     <div class="row"><span class="pname" id="ch-name">FASE</span><span class="time" id="ch-time">0:00</span></div>
@@ -241,11 +256,10 @@
 <script type="module">
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const REPOS = [
@@ -303,15 +317,107 @@ renderer.toneMappingExposure = 1.05;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x04060f, 0.0055);
+scene.fog = new THREE.FogExp2(0x0a1226, 0.0042);
 
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 900);
 camera.position.set(24, 16, 60);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
+// ambiente de CIDADE noturna procedural: ceu em gradiente + blocos emissivos
+// coloridos ao redor — metal, vidro e clearcoat do carro refletem a cidade
+function makeCityEnv() {
+  const env = new THREE.Scene();
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#0d1f4c');
+  grad.addColorStop(0.55, '#16306b');
+  grad.addColorStop(0.82, '#3b1d5e');
+  grad.addColorStop(1, '#0c0a18');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 16, 256);
+  const skyTex = new THREE.CanvasTexture(c);
+  skyTex.colorSpace = THREE.SRGBColorSpace;
+  env.add(new THREE.Mesh(new THREE.SphereGeometry(60, 16, 12), new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide })));
+  const boxMats = [0x00e5ff, 0xff2d95, 0xffd54f, 0x7c4dff].map((cc) => new THREE.MeshBasicMaterial({ color: cc }));
+  for (let i = 0; i < 26; i++) {
+    const h = 6 + (i % 5) * 4;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(2 + (i % 3), h, 2 + (i % 4)), boxMats[i % 4]);
+    const a = (i / 26) * Math.PI * 2;
+    const rr = 18 + (i % 7) * 3.5;
+    b.position.set(Math.cos(a) * rr, h / 2 - 6, Math.sin(a) * rr);
+    env.add(b);
+  }
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 12), new THREE.MeshBasicMaterial({ color: 0xbfd8ff }));
+  moon.position.set(-22, 32, -26);
+  env.add(moon);
+  return env;
+}
+scene.environment = pmrem.fromScene(makeCityEnv(), 0.04).texture;
 
 scene.add(new THREE.HemisphereLight(0x88aaff, 0x080820, 0.7));
+
+/* --- ceu real: cúpula em gradiente + 1300 estrelas + lua ---
+   Custo zero por frame (MeshBasicMaterial, sem luz, sem sombra) e muda
+   completamente a leitura da cena contra o bloom. */
+{
+  const skyCanvas = document.createElement('canvas');
+  skyCanvas.width = 16; skyCanvas.height = 512;
+  const skyCtx = skyCanvas.getContext('2d');
+  const skyGrad = skyCtx.createLinearGradient(0, 0, 0, 512);
+  skyGrad.addColorStop(0, '#060a18');
+  skyGrad.addColorStop(0.45, '#101d3f');
+  skyGrad.addColorStop(0.75, '#2a1a52');
+  skyGrad.addColorStop(0.92, '#54205e');
+  skyGrad.addColorStop(1, '#1a0f2e');
+  skyCtx.fillStyle = skyGrad;
+  skyCtx.fillRect(0, 0, 16, 512);
+  const skyTex = new THREE.CanvasTexture(skyCanvas);
+  skyTex.colorSpace = THREE.SRGBColorSpace;
+  const skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(820, 24, 16),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false, depthWrite: false })
+  );
+  skyDome.renderOrder = -10;
+  scene.add(skyDome);
+
+  const starGeo = new THREE.BufferGeometry();
+  const starCount = 1300;
+  const pos = new Float32Array(starCount * 3);
+  const siz = new Float32Array(starCount);
+  for (let i = 0; i < starCount; i++) {
+    const a = rand() * Math.PI * 2;
+    const el = Math.random ? 0.06 + rand() * 1.35 : 0.5;
+    const rr = 760;
+    pos[i * 3] = Math.cos(a) * Math.cos(el) * rr;
+    pos[i * 3 + 1] = Math.sin(el) * rr;
+    pos[i * 3 + 2] = Math.sin(a) * Math.cos(el) * rr;
+    siz[i] = 1.1 + rand() * 2.4;
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  starGeo.setAttribute('size', new THREE.BufferAttribute(siz, 1));
+  const starMat = new THREE.PointsMaterial({
+    color: 0xcfe0ff, size: 2.2, sizeAttenuation: true,
+    transparent: true, opacity: 0.85, fog: false, depthWrite: false
+  });
+  scene.add(new THREE.Points(starGeo, starMat));
+
+  const moon = new THREE.Mesh(
+    new THREE.SphereGeometry(26, 24, 24),
+    new THREE.MeshBasicMaterial({ color: 0xe8f1ff, fog: false })
+  );
+  moon.position.set(-420, 340, -520);
+  scene.add(moon);
+  const haloTex = makeRadialTexture('rgba(230,240,255,0.9)', 'rgba(160,200,255,0.45)', 'rgba(80,120,255,0)');
+  const moonHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: haloTex, transparent: true, opacity: 0.5,
+    depthWrite: false, toneMapped: false, fog: false
+  }));
+  moonHalo.scale.set(190, 190, 1);
+  moonHalo.position.copy(moon.position);
+  scene.add(moonHalo);
+}
 const SHADOW_HALF = 70;
 const sun = new THREE.DirectionalLight(0xffffff, 1.7);
 sun.position.set(80, 120, 60);
@@ -634,6 +740,86 @@ for (const [rx, rz, rotY] of RAMP_DEFS) {
   ramps.push({ x: rx, z: rz, rotY, L, H, W });
 }
 
+let loopGround = null; // altura do tubo do looping (definido no bloco abaixo)
+let loopLaps = 0;
+/* --- LOOPING estilo Hot Wheels ---
+   Um tubo em circulo completo (raio R, centro a R do chao): quem entra com
+   velocidade percorre o laco de cabeco, quem vai devagar despenca no ponto
+   critico (v^2 < g*R) e cai no chao. A fisica e o mesmo groundHeightAt do
+   jogador: alturas continuas, sem teleporte. Entrada/saida no ponto sul. */
+const LOOP = { x: 36, z: 36, R: 11, W: 9 };
+{
+  const cy = LOOP.R; // centro do laco: o ponto de baixo encosta no chao (y=0)
+  const stripes = document.createElement('canvas');
+  stripes.width = 128; stripes.height = 128;
+  const sctx = stripes.getContext('2d');
+  sctx.fillStyle = '#141c2c';
+  sctx.fillRect(0, 0, 128, 128);
+  sctx.fillStyle = '#ffb300';
+  for (let i = 0; i < 4; i++) sctx.fillRect(i * 32, 0, 12, 128);
+  const stripeTex = new THREE.CanvasTexture(stripes);
+  stripeTex.colorSpace = THREE.SRGBColorSpace;
+  stripeTex.wrapS = stripeTex.wrapT = THREE.RepeatWrapping;
+  stripeTex.repeat.set(10, 1);
+
+  const tubeMat = new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.55, metalness: 0.45, envMapIntensity: 0.7, side: THREE.DoubleSide });
+  const tubeGeo = new THREE.CylinderGeometry(LOOP.R, LOOP.R, LOOP.W, 44, 1, true);
+  tubeGeo.rotateZ(Math.PI / 2); // eixo do tubo no eixo X do mundo
+  const tube = new THREE.Mesh(tubeGeo, tubeMat);
+  tube.position.set(LOOP.x, cy, LOOP.z);
+  tube.castShadow = true;
+  tube.receiveShadow = true;
+  scene.add(tube);
+
+  // bordas neon de cada boca do tubo (elas ficam alinhadas no eixo X)
+  for (const side of [-1, 1]) {
+    const edge = new THREE.Mesh(
+      new THREE.TorusGeometry(LOOP.R, 0.18, 8, 48),
+      new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 2.6, toneMapped: false })
+    );
+    edge.rotation.y = Math.PI / 2;
+    edge.position.set(LOOP.x + side * (LOOP.W / 2), cy, LOOP.z);
+    scene.add(edge);
+  }
+
+  // pilares de apoio: 3 colunas finas do centro ate o chao + bases com luz
+  const pilarMat = new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.6, metalness: 0.6 });
+  for (let k = 0; k < 3; k++) {
+    const a = -Math.PI / 2 + (k - 1) * 1.1; // evita o ponto de entrada (sul)
+    const px = LOOP.x + Math.cos(a) * LOOP.R * 0.55;
+    const pz = LOOP.z + Math.sin(a) * LOOP.R * 0.55;
+    const py = cy + Math.sin(a) * LOOP.R * 0.55;
+    const hgt = Math.max(0.6, py);
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.5, hgt, 10), pilarMat);
+    pillar.position.set(px, hgt / 2, pz);
+    scene.add(pillar);
+    const base = new THREE.Mesh(unitBoxGeo, neonMats[2]);
+    base.scale.set(1.6, 0.18, 1.6);
+    base.position.set(px, 0.09, pz);
+    scene.add(base);
+  }
+
+  // setas no chao indicando a entrada
+  const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffb300, toneMapped: false, transparent: true, opacity: 0.85 });
+  for (let k = 0; k < 3; k++) {
+    const arr = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2.6, 3), arrowMat);
+    arr.rotation.x = Math.PI / 2;
+    arr.rotation.z = Math.PI;
+    arr.position.set(LOOP.x, 0.08, LOOP.z - 6 - k * 3.4);
+    scene.add(arr);
+  }
+
+  // altura do piso interno perto do ponto mais baixo (entrada): faixa estreita
+  // para o carro alinhar com a boca do tubo sem degraus; o resto e o passeio
+  loopGround = (x, z) => {
+    if (Math.abs(x - LOOP.x) > LOOP.W / 2) return -1;
+    const dzz = z - LOOP.z;
+    if (Math.abs(dzz) > 3) return -1;
+    return LOOP.R - Math.sqrt(LOOP.R * LOOP.R - dzz * dzz);
+  };
+  loopLaps = 0;
+}
+
 const PAD_RADIUS = 5;
 const PAD_TOP = 0.26;
 function rampAt(x, z) {
@@ -658,6 +844,10 @@ function groundHeightAt(x, z, ignoreRamps = false) {
   }
   for (const p of pads) {
     if (Math.hypot(x - p.x, z - p.z) <= PAD_RADIUS) h = Math.max(h, PAD_TOP);
+  }
+  if (loopGround) {
+    const lh = loopGround(x, z);
+    if (lh > 0) h = Math.max(h, lh);
   }
   return h;
 }
@@ -845,7 +1035,22 @@ function phaseScore() {
 }
 function phaseUnlocked(def) { return phaseScore() >= def.unlock || phaseDone.includes(def.id); }
 
-const phaseState = { active: false, phase: null, def: null, t: 0, progress: 0, lives: 0, gate: 0, inside: true, hintT: 0 };
+/* --- dificuldade escolhida no painel da fase (facil / medio / dificil) ---
+   Multiplica recompensa e aperta os knobs da IA (rivais + rapidos, chefao
+   mais forte, goals maiores). DIFICIL tem que ser bem dificil mesmo. */
+const DIFFS = [
+  { key: 'FACIL', mult: 1, timeMul: 1.25, goalMul: 0.8, lives: 5, bossHp: 70, bossSpeed: 0.85, bossTelegraph: 1.35, label: 'FACIL · x1' },
+  { key: 'MEDIO', mult: 2, timeMul: 1, goalMul: 1, lives: 3, bossHp: 100, bossSpeed: 1, bossTelegraph: 1, label: 'MEDIO · x2' },
+  { key: 'DIFICIL', mult: 3, timeMul: 0.8, goalMul: 1.25, lives: 1, bossHp: 150, bossSpeed: 1.12, bossTelegraph: 0.7, label: 'DIFICIL · x3' }
+];
+const DIFF_KEY = 'francos-repo-racer-diff';
+let lastDiff = 1;
+try { lastDiff = Math.max(0, Math.min(2, Number(localStorage.getItem(DIFF_KEY)) || 1)); } catch (e) { lastDiff = 1; }
+function saveDiff() {
+  try { localStorage.setItem(DIFF_KEY, String(lastDiff)); } catch (e) { /* sem storage */ }
+}
+
+const phaseState = { active: false, phase: null, def: null, diff: 1, t: 0, progress: 0, lives: 0, gate: 0, inside: true, hintT: 0 };
 let activePhaseZone = null;
 
 function makePhaseDiscTexture() {
@@ -1064,6 +1269,10 @@ function setGateActive(i) {
 /* --- rivais da fase de caca --- */
 const enemies = [];
 const ENEMY_SPEED = { stalk: 22, telegraph: 4, charge: 38, recover: 2 };
+// multiplicador de agressividade da cacada conforme a dificuldade escolhida
+function chaseAggr() {
+  return phaseState.active && phaseState.def && phaseState.def.type === 'chase' && DIFFS[phaseState.diff] ? DIFFS[phaseState.diff].mult : 1;
+}
 function makeEnemyCar() {
   const g = makeTrafficCar(0xff2d55);
   const stripe = new THREE.Mesh(
@@ -1084,7 +1293,7 @@ function makeEnemyCar() {
 }
 function spawnEnemies(def) {
   clearEnemies();
-  const n = def.enemies || 3;
+  const n = (def.enemies || 3) + (phaseState.diff >= 2 ? 2 : 0); // DIFICIL: 5 rivais
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + 0.4;
     const dist = def.radius + 30;
@@ -1094,7 +1303,7 @@ function spawnEnemies(def) {
     mesh.position.set(x, 0, z);
     const heading = a + Math.PI;
     mesh.rotation.y = heading;
-    enemies.push({ mesh, x, z, heading, moveH: heading, speed: 0, hp: 3, mode: 'stalk', modeT: 2.4 + i * 0.8, hitCd: 0, alive: true, lean: 0, flashT: 0 });
+    enemies.push({ mesh, x, z, heading, moveH: heading, speed: 0, hp: phaseState.diff >= 2 ? 4 : 3, mode: 'stalk', modeT: 2.4 + i * 0.8, hitCd: 0, alive: true, lean: 0, flashT: 0, flank: i * 2.4, dir: i % 2 ? 1 : -1 });
   }
 }
 function clearEnemies() {
@@ -1113,27 +1322,44 @@ function hurtPlayerInPhase() {
 function updateEnemies(dt) {
   for (const e of enemies) {
     if (!e.alive) continue;
+    const aggr = chaseAggr();
     e.hitCd = Math.max(0, e.hitCd - dt);
     e.flashT = Math.max(0, e.flashT - dt);
     const dx = car.position.x - e.x, dz = car.position.z - e.z;
     const dist = Math.hypot(dx, dz) || 0.001;
-    const want = Math.atan2(dx, dz);
+    // intercepta o PONTO PARA ONDE voce vai, nao onde esta (anticipacao) e
+    // flanqueia: corta caminho por um lado em vez de correr atras — fugir em
+    // linha reta nao escapa mais
+    const cSpd = Math.abs(state.speed);
+    const pvx = Math.sin(state.moveH) * cSpd, pvz = Math.cos(state.moveH) * cSpd;
+    const closeIn = dist / Math.max(12, ENEMY_SPEED.stalk * aggr);
+    const lead = clamp(closeIn, 0, 2.2);
+    let tx = car.position.x + pvx * lead, tz = car.position.z + pvz * lead;
+    const want = Math.atan2(tx - e.x, tz - e.z);
     e.modeT -= dt;
     let turn = 1.7, accel = 30;
     if (e.mode === 'stalk') {
+      // flanqueio: todos os rivais miram num ponto deslocado pra um lado
+      e.flank += dt * 0.9 * (e.dir || 1);
+      const fAng = want + clamp(Math.sin(e.flank), -1, 1) * clamp((dist - 8) / 40, 0, 1) * 0.9;
+      e.heading = turnToward(e.heading, fAng, turn, dt);
       if (e.modeT <= 0) { e.mode = 'telegraph'; e.modeT = 0.8; tone(660, 0.1, { gain: 0.05 }); }
     } else if (e.mode === 'telegraph') {
       turn = 2.6;
+      e.heading = turnToward(e.heading, want, turn, dt);
       if (e.modeT <= 0) { e.mode = 'charge'; e.modeT = 1.5; e.heading = want; }
     } else if (e.mode === 'charge') {
       turn = 1.2; accel = 70;
-      if (e.modeT <= 0) { e.mode = 'recover'; e.modeT = 2.2; }
+      e.heading = turnToward(e.heading, want, turn, dt);
+      // ja passou pelo alvo (afastando-se)? encerra a carga antes de atolar longe
+      const vx = Math.sin(e.moveH) * e.speed, vz = Math.cos(e.moveH) * e.speed;
+      if (dx * vx + dz * vz < 0 || e.modeT <= 0) { e.mode = 'recover'; e.modeT = 2.2; }
     } else if (e.modeT <= 0) {
       e.mode = 'stalk';
-      e.modeT = 3 + rand() * 2;
+      e.modeT = Math.max(1.2, 3 + rand() * 2 - (aggr - 1));
+      e.flank = rand() * Math.PI * 2;
     }
-    const target = ENEMY_SPEED[e.mode];
-    e.heading = turnToward(e.heading, want, turn, dt);
+    const target = ENEMY_SPEED[e.mode] * (e.mode === 'stalk' || e.mode === 'charge' ? aggr : 1);
     e.speed += clamp(target - e.speed, -70 * dt, accel * dt);
     e.moveH = turnToward(e.moveH, e.heading, turn * 0.6, dt);
     e.x += Math.sin(e.moveH) * e.speed * dt;
@@ -1210,7 +1436,7 @@ function nearestPhase() {
   return best;
 }
 
-function startPhase(p) {
+function startPhase(p, diff) {
   if (!p || phaseState.active) return;
   if (state.bossActive) { toast('TERMINE O COMBATE PRIMEIRO!', '#ff5470'); return; }
   const def = p.def;
@@ -1219,12 +1445,16 @@ function startPhase(p) {
     thud();
     return;
   }
+  const di = clamp(diff === undefined ? lastDiff : Number(diff) | 0, 0, 2);
+  lastDiff = di; saveDiff();
+  const D = DIFFS[di];
   phaseState.active = true;
   phaseState.phase = p;
   phaseState.def = def;
-  phaseState.t = def.time || 60;
+  phaseState.diff = di;
+  phaseState.t = Math.round((def.time || 60) * D.timeMul);
   phaseState.progress = 0;
-  phaseState.lives = def.lives || 0;
+  phaseState.lives = (def.type === 'chase') ? D.lives : (def.lives || 0);
   phaseState.gate = 0;
   phaseState.inside = true;
   phaseState.hintT = 0;
@@ -1238,7 +1468,7 @@ function startPhase(p) {
   challengeEl.classList.add('show');
   if (def.type === 'gates') buildGates(def);
   if (def.type === 'chase') spawnEnemies(def);
-  toast('FASE: ' + def.name, '#ff2d95');
+  toast('FASE: ' + def.name + ' — ' + D.key, '#ff2d95');
   tone(520, 0.18, { gain: 0.07 });
   tone(780, 0.22, { gain: 0.07, delay: 0.14 });
 }
@@ -1251,7 +1481,7 @@ function endPhase(win, reason) {
   clearGates();
   clearEnemies();
   challengeEl.classList.remove('show');
-  const reward = win ? (def.reward || 0) : 0;
+  const reward = win ? Math.round((def.reward || 0) * (DIFFS[phaseState.diff] || DIFFS[1]).mult) : 0;
   if (win) {
     scoreState.total += reward;
     if (!phaseDone.includes(def.id)) { phaseDone.push(def.id); savePhaseDone(); }
@@ -1302,12 +1532,14 @@ function updatePhases(dt) {
       if (near) {
         const st = phaseStatus(near);
         phaseNameEl.textContent = near.def.name;
-        phaseDescEl.textContent = near.def.desc + '  ·  recompensa ' + near.def.reward + ' pts';
+        phaseDescEl.textContent = near.def.desc + '  ·  recompensa x1/' + 'x2/x3 pela dificuldade';
         phaseLockEl.textContent = st === 'locked'
           ? 'BLOQUEADA — REQUER ' + near.def.unlock + ' PONTOS'
-          : st === 'done' ? 'JA CONCLUIDA — pode repetir' : 'DISPONIVEL';
+          : st === 'done' ? 'JA CONCLUIDA — pode repetir' : 'ESCOLHA A DIFICULDADE:';
         phaseLockEl.classList.toggle('ready', st !== 'locked');
+        document.getElementById('diff-row').style.display = st === 'locked' ? 'none' : 'flex';
         phasePanel.classList.add('show');
+        if (phaseState.active) phasePanel.classList.remove('show');
       } else {
         phasePanel.classList.remove('show');
       }
@@ -1326,10 +1558,11 @@ function updatePhases(dt) {
     }
   }
   if (def.type === 'drift' || def.type === 'ring') {
-    if (phaseState.progress >= def.goal) {
+    const goalNow = Math.round((def.goal || 0) * (DIFFS[phaseState.diff] || DIFFS[1]).goalMul);
+    if (goalNow > 0 && phaseState.progress >= goalNow) {
       endPhase(true, def.name + ' dominada com ' + Math.round(phaseState.progress) + ' pontos de derrapagem.');
     } else if (phaseState.t <= 0) {
-      endPhase(false, 'O tempo acabou com ' + Math.round(phaseState.progress) + '/' + def.goal + ' pontos de derrapagem.');
+      endPhase(false, 'O tempo acabou com ' + Math.round(phaseState.progress) + '/' + Math.round((def.goal || 0) * (DIFFS[phaseState.diff] || DIFFS[1]).goalMul) + ' pontos de derrapagem.');
     }
   } else if (def.type === 'gates') {
     const g = def.gates[phaseState.gate];
@@ -1365,7 +1598,20 @@ function interact() {
   if (activePhaseZone) { startPhase(activePhaseZone); return; }
   openActive();
 }
+// teclas 1/2/3: comecar a fase em facil/medio/dificil quando perto de um circulo
+window.addEventListener('keydown', (e) => {
+  if (!activePhaseZone || phaseState.active) return;
+  if (e.key === '1') startPhase(activePhaseZone, 0);
+  else if (e.key === '2' || e.key === 'e' || e.key === 'E' || e.key === 'Enter') startPhase(activePhaseZone, 1);
+  else if (e.key === '3') startPhase(activePhaseZone, 2);
+});
 
+document.querySelectorAll('#diff-row .diff').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if (!activePhaseZone) return;
+    startPhase(activePhaseZone, Number(btn.dataset.diff) || 0);
+  });
+});
 document.getElementById('phase-go').addEventListener('click', () => { if (activePhaseZone) startPhase(activePhaseZone); });
 document.getElementById('pe-retry').addEventListener('click', () => {
   const p = phaseState.phase;
@@ -1474,6 +1720,24 @@ headlight.position.set(0, 0.85, 1.9);
 headlight.target.position.set(0, 0, 24);
 carBody.add(headlight);
 carBody.add(headlight.target);
+// farol volumétrico (cabo transparente) + luz do nitro (só desktop: LOW_END
+// economiza cada luz extra)
+let headlightCone = null, nitroLight = null;
+if (!LOW_END) {
+  headlightCone = new THREE.Mesh(
+    new THREE.ConeGeometry(2.2, 15, 20, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xfff2d0, transparent: true, opacity: 0.07, side: THREE.DoubleSide,
+      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false
+    })
+  );
+  headlightCone.rotation.x = Math.PI / 2;
+  headlightCone.position.set(0, 0.8, 9.6);
+  carBody.add(headlightCone);
+  nitroLight = new THREE.PointLight(0x66ccff, 0, 12, 2);
+  nitroLight.position.set(0, 0.7, -2.4);
+  carBody.add(nitroLight);
+}
 
 const glow = new THREE.PointLight(0x00e5ff, 3, 11, 2);
 glow.position.y = 0.22;
@@ -1608,7 +1872,48 @@ function spawnSmoke(x, z) {
   s.sprite.material.opacity = 0.5;
 }
 
-const BOSS_CFG = { hp: 100, time: 90, contact: 4.2, stalkSpeed: 24, chargeSpeed: 46 };
+const BOSS_CFG = { hp: 100, time: 90, contact: 4.2, stalkSpeed: 24, chargeSpeed: 46, flanking: true };
+// stats por dificuldade escolhida (soma por cima do BOSS_CFG)
+function bossStats() {
+  const D = DIFFS[phaseState.diff] || DIFFS[1];
+  return {
+    hp: Math.round(BOSS_CFG.hp * (D.bossHp / 100)),
+    stalk: BOSS_CFG.stalkSpeed * D.bossSpeed,
+    charge: BOSS_CFG.chargeSpeed * D.bossSpeed,
+    telegraphT: 0.9 * D.bossTelegraph,
+    stalkT: 3.5 * D.bossTelegraph
+  };
+}
+/* --- desvio de predios ---
+   Amostra 3 pontos a frente do chefao; se algum cai dentro de um predio
+   (inflado pelo raio dele), gira para o lado livre. Barato: ~3 checagens
+   por frame, sem grid nem raycast. */
+function circleHitsBuilding(px, pz, r) {
+  for (const bl of buildings) {
+    const cx = Math.max(bl.x - bl.w / 2, Math.min(px, bl.x + bl.w / 2));
+    const cz = Math.max(bl.z - bl.d / 2, Math.min(pz, bl.z + bl.d / 2));
+    if ((px - cx) * (px - cx) + (pz - cz) * (pz - cz) < r * r) return bl;
+  }
+  return null;
+}
+function bossAvoid(b, dt) {
+  const look = 8 + b.speed * 0.5, r = 4.5;
+  for (const s of [1, 0.6, 0.3]) {
+    const ax = b.x + Math.sin(b.moveH) * look * s;
+    const az = b.z + Math.cos(b.moveH) * look * s;
+    if (circleHitsBuilding(ax, az, r)) {
+      // escolhe o lado com mais espaco: testa pontos a 60 graus dos dois lados
+      const base = Math.atan2(ax - b.x, az - b.z);
+      const dl = circleHitsBuilding(b.x + Math.sin(base - 0.9) * look, b.z + Math.cos(base - 0.9) * look, r);
+      const dr = circleHitsBuilding(b.x + Math.sin(base + 0.9) * look, b.z + Math.cos(base + 0.9) * look, r);
+      const side = dl && !dr ? 1 : dr && !dl ? -1 : (b.avoidSide || (rand() < 0.5 ? -1 : 1));
+      b.avoidSide = side;
+      b.heading = turnToward(b.heading, base + side * 0.95, 2.4, dt);
+      return true;
+    }
+  }
+  return false;
+}
 let boss = null;
 let bossMesh = null;
 let playerHp = 3;
@@ -1676,11 +1981,12 @@ function startBoss() {
     const d = Math.hypot(px - car.position.x, pz - car.position.z);
     if (d > far) { far = d; sx = px; sz = pz; }
   }
+  const st2 = bossStats();
   boss = {
     x: sx, z: sz,
     heading: Math.atan2(car.position.x - sx, car.position.z - sz),
-    speed: 0, hp: BOSS_CFG.hp, mode: 'stalk', modeT: 4,
-    flashT: 0, alive: true, lean: 0, moveH: 0
+    speed: 0, hp: st2.hp, maxHp: st2.hp, mode: 'stalk', modeT: 4,
+    flashT: 0, alive: true, lean: 0, moveH: 0, avoidSide: 0
   };
   boss.moveH = boss.heading;
   bossMesh.group.visible = true;
@@ -1738,7 +2044,6 @@ function bossEnd(win, reason) {
   const title = document.getElementById('done-title');
   const sub1 = document.getElementById('done-sub1');
   if (win) {
-    scoreState.total += 5000;
     title.textContent = 'CHEFÃO DERROTADO!';
     title.style.color = 'var(--green)';
     sub1.innerHTML = 'SEGV foi ao chão — a <b>cidade neon</b> está salva.';
@@ -1751,6 +2056,13 @@ function bossEnd(win, reason) {
     document.getElementById('done-retry').style.display = 'block';
   }
   document.getElementById('done-boss').style.display = 'none';
+  // se a luta veio do circulo de fase, a propria endPhase paga a recompensa
+  // (com multiplicador de dificuldade) e registra a fase como concluida
+  if (phaseState.active && phaseState.def && phaseState.def.type === 'boss') {
+    endPhase(win, win ? 'SEGV foi ao chao — arena dominada!' : (reason || 'SEGV sobreviveu. Tente de novo!'));
+    return;
+  }
+  // luta avulsa (?boss=1): recorde vai pro localStorage
   const prevRec = Number(localStorage.getItem(SCORE_KEY) || 0);
   bankScore();
   const sc = scoreState.total;
@@ -1758,27 +2070,26 @@ function bossEnd(win, reason) {
     ? 'Pontuacao: ' + sc + ' — novo recorde de pontos!'
     : 'Pontuacao: ' + sc + ' (recorde: ' + prevRec + ')';
   document.getElementById('done').classList.add('show');
-  // se a luta veio do circulo de fase, fecha a fase e libera as proximas
-  if (phaseState.active && phaseState.def && phaseState.def.type === 'boss') {
-    phaseState.active = false;
-    challengeEl.classList.remove('show');
-    if (win && !phaseDone.includes(phaseState.def.id)) { phaseDone.push(phaseState.def.id); savePhaseDone(); }
-    if (phaseState.phase) refreshPhaseBanner(phaseState.phase);
-  }
 }
 
 function updateBoss(dt) {
   const b = boss;
+  const st = bossStats();
   const dx = car.position.x - b.x, dz = car.position.z - b.z;
   const dist = Math.hypot(dx, dz) || 0.001;
-  const want = Math.atan2(dx, dz);
+  // persegue o PONTO PARA ONDE voce vai, nao onde esta: fugir em linha reta
+  // nao escapa mais — so mudando de direcao (ou derrapando) voce engana ele
+  const cSpd = Math.abs(state.speed);
+  const pvx = Math.sin(state.moveH) * cSpd, pvz = Math.cos(state.moveH) * cSpd;
+  const lead = clamp(dist / Math.max(14, st.stalk), 0, 2);
+  const want = Math.atan2(dx + pvx * lead, dz + pvz * lead);
   let target = 0;
   b.modeT -= dt;
   if (b.mode === 'stalk') {
-    target = BOSS_CFG.stalkSpeed;
-    b.heading = turnToward(b.heading, want, 1.5, dt);
+    target = st.stalk;
+    if (!bossAvoid(b, dt)) b.heading = turnToward(b.heading, want, 1.5, dt);
     if (b.modeT <= 0) {
-      b.mode = 'telegraph'; b.modeT = 0.9;
+      b.mode = 'telegraph'; b.modeT = st.telegraphT;
       tone(880, 0.12, { gain: 0.07 });
       tone(880, 0.12, { gain: 0.07, delay: 0.22 });
     }
@@ -1787,19 +2098,21 @@ function updateBoss(dt) {
     b.heading = turnToward(b.heading, want, 2.4, dt);
     if (b.modeT <= 0) {
       b.mode = 'charge'; b.modeT = 1.7;
-      b.heading = want;
+      b.heading = Math.atan2(dx, dz); // a investida trava no ponto REAL de voce
       tone(220, 0.5, { type: 'sawtooth', gain: 0.08, freqEnd: 660 });
     }
   } else if (b.mode === 'charge') {
-    target = BOSS_CFG.chargeSpeed;
+    target = st.charge;
     if (b.modeT <= 0) { b.mode = 'recover'; b.modeT = 2.2; }
     else if (dist < 12) {
       // perto demais: curva fechada para tentar acertar — e derrapa
-      b.heading = turnToward(b.heading, want, 1.1, dt);
+      b.heading = turnToward(b.heading, Math.atan2(dx, dz), 1.1, dt);
+    } else if (!bossAvoid(b, dt)) {
+      b.heading = turnToward(b.heading, Math.atan2(dx + pvx * 0.6, dz + pvz * 0.6), 0.9, dt);
     }
   } else {
     target = 0;
-    if (b.modeT <= 0) { b.mode = 'stalk'; b.modeT = 3.5 + rand() * 2; }
+    if (b.modeT <= 0) { b.mode = 'stalk'; b.modeT = st.stalkT + rand() * 2; }
   }
   const accel = b.mode === 'charge' ? 70 : 26;
   b.speed += clamp(target - b.speed, -60 * dt, accel * dt);
@@ -1997,7 +2310,7 @@ function visitChime() {
 function pickupBlip() { tone(560, 0.14, { freqEnd: 1120, gain: 0.06 }); }
 function comboBlip(combo) { tone(480 + combo * 90, 0.07, { gain: 0.05 }); }
 
-const state = { speed: 0, heading: 0, steer: 0, slip: 0, moveH: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, nitro: 1, boosting: false, started: false, startTime: 0, finished: false, bossActive: false };
+const state = { speed: 0, heading: 0, steer: 0, slip: 0, moveH: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, looping: false, nitro: 1, boosting: false, started: false, startTime: 0, finished: false, bossActive: false };
 const stats = { accel: 1, max: 34, grip: 1 };
 car.position.set(0, 0, -34);
 car.rotation.y = 0;
@@ -2269,11 +2582,50 @@ function drawMinimap() {
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.6, 0.55, 0.8);
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LOW_END ? 0.6 : 0.78, 0.62, 0.72);
 composer.addPass(bloom);
+// vinheta + aberracao cromatica sutil + leve saturacao: acabamento synthwave
+// barato (1 quad, 5 samples) — em LOW_END vira so vinheta
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uVignette: { value: LOW_END ? 0.32 : 0.42 },
+    uCA: { value: LOW_END ? 0 : 1 },
+    uSat: { value: LOW_END ? 0 : 1 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uVignette;
+    uniform float uCA;
+    uniform float uSat;
+    varying vec2 vUv;
+    void main() {
+      vec2 c = vUv - 0.5;
+      float d = dot(c, c);
+      vec3 col;
+      if (uCA > 0.5) {
+        float off = d * 0.012;
+        col.r = texture2D(tDiffuse, vUv + c * off).r;
+        col.g = texture2D(tDiffuse, vUv).g;
+        col.b = texture2D(tDiffuse, vUv - c * off).b;
+        float l = dot(col, vec3(0.299, 0.587, 0.114));
+        col = mix(vec3(l), col, 1.12);
+      } else {
+        col = texture2D(tDiffuse, vUv).rgb;
+      }
+      col *= 1.0 - d * uVignette * 2.0;
+      gl_FragColor = vec4(col, 1.0);
+    }`
+};
+const gradePass = new ShaderPass(GradeShader);
+composer.addPass(gradePass);
 composer.addPass(new OutputPass());
-const smaa = LOW_END ? null : new SMAAPass(window.innerWidth, window.innerHeight);
-if (smaa) composer.addPass(smaa);
 
 const clock = new THREE.Clock();
 const camOffset = new THREE.Vector3(0, 6.8, -14);
@@ -2382,6 +2734,65 @@ function update(dt) {
   carBody.rotation.x = state.pitch + state.slope;
   carBody.rotation.z = -state.steer * 0.07;
 
+  /* --- LOOPING: passeio paramétrico ---
+     Chegou na boca (dirigindo para norte, dentro do plano da boca) com
+     velocidade suficiente? Gruda no trilho circular: o angulo avanca pela
+     FORCA REAL do motor (w = v/R) e a orientacao acompanha a tangente (o carro
+     fica de cabeca pra baixo no topo). Completou a volta: solta no chao, +800.
+     A velocidade critica fisica (v^2 < g*R no topo) e respeitada: sem ela,
+     o passeio nem comeca. */
+  if (loopGround) {
+    if (!state.looping && !state.airborne && state.y < 0.6
+      && Math.abs(car.position.x - LOOP.x) <= LOOP.W / 2
+      && car.position.z > LOOP.z - 17 && car.position.z < LOOP.z - 3
+      && Math.cos(state.heading) > 0.7) {
+      const needV = Math.sqrt(2 * 26 * (2 * LOOP.R)) * 1.06; // energia do laco + 6%
+      if (Math.abs(state.speed) >= needV) {
+        state.looping = true;
+        state.loopA = 0; // ponto mais baixo do tubo
+        loopLaps = 0;
+      }
+    }
+    if (state.looping) {
+      const w = Math.abs(state.speed) / LOOP.R; // velocidade angular real do motor
+      state.loopA += w * dt;
+      if (state.loopA >= Math.PI * 2) {
+        // completou a volta: solta no chao no ponto mais baixo, seguindo norte
+        loopLaps++;
+        scoreState.total += 800;
+        toast('LOOPING ' + loopLaps + 'x!  +800', '#ffb300');
+        tone(520, 0.1, { gain: 0.06 });
+        tone(660, 0.12, { gain: 0.06, delay: 0.09 });
+        tone(880, 0.16, { gain: 0.06, delay: 0.2 });
+        state.looping = false;
+        state.loopA = 0;
+        state.y = 0;
+        state.airborne = false;
+        state.vy = 0;
+        state.moveH = 0;
+        state.slope = 0;
+      } else {
+        const ca = Math.cos(state.loopA), sa = Math.sin(state.loopA);
+        car.position.x = LOOP.x;
+        car.position.z = LOOP.z + sa * LOOP.R;
+        state.y = LOOP.R - ca * LOOP.R;
+        car.rotation.y = 0;
+        carBody.rotation.x = -state.loopA; // acompanha a tangente (cabeca pra baixo no topo)
+        carBody.rotation.z = 0;
+        if (Math.abs(state.speed) < Math.sqrt(26 * LOOP.R) * 0.82) {
+          // perdeu a forca centripeta antes de fechar: despenca
+          state.looping = false;
+          state.loopA = 0;
+          state.airborne = true;
+          state.vy = 0;
+          onCrash();
+          toast('VELOCIDADE BAIXA — CAIU!', '#ff5470');
+        }
+      }
+      car.position.y = state.y;
+      return; // o passeio manda no carro neste frame
+    }
+  }
   const gh = groundHeightAt(car.position.x, car.position.z);
   const rc = rampAt(car.position.x, car.position.z);
   const rise = gh - state.y; // quanto o chao esta acima do carro
@@ -2579,6 +2990,10 @@ function update(dt) {
   }
   glow.intensity = state.boosting ? 6 : 3;
   headlight.intensity = 70 + Math.abs(state.speed);
+  if (nitroLight) nitroLight.intensity = state.boosting ? 14 : 0;
+  if (headlightCone) {
+    headlightCone.material.opacity = 0.05 + Math.min(0.05, Math.abs(state.speed) * 0.0012);
+  }
 
   let nearest = null, nearestDist = PAD_RADIUS + 0.4;
   for (const p of pads) {
@@ -2700,8 +3115,8 @@ function present(dt) {
     timerEl.textContent = String(Math.floor(elapsed / 60)).padStart(2, '0') + ':' + String(Math.floor(elapsed % 60)).padStart(2, '0');
   }
   if (state.bossActive && boss) {
-    bossHpEl.style.width = Math.round((boss.hp / BOSS_CFG.hp) * 100) + '%';
-    bossHpTxtEl.textContent = Math.ceil(boss.hp) + '/' + BOSS_CFG.hp;
+    bossHpEl.style.width = Math.round((boss.hp / (boss.maxHp || BOSS_CFG.hp)) * 100) + '%';
+    bossHpTxtEl.textContent = Math.ceil(boss.hp) + '/' + (boss.maxHp || BOSS_CFG.hp);
     bossHeartsEl.textContent = '♥'.repeat(playerHp) + '♡'.repeat(Math.max(0, 3 - playerHp));
     const bt = Math.max(0, Math.ceil(bossTimer));
     bossTimeEl.textContent = Math.floor(bt / 60) + ':' + String(bt % 60).padStart(2, '0');
@@ -2712,11 +3127,12 @@ function present(dt) {
     const bt = Math.max(0, Math.ceil(phaseState.t));
     chTimeEl.textContent = bt >= 60 ? Math.floor(bt / 60) + ':' + String(bt % 60).padStart(2, '0') : '0:' + String(bt).padStart(2, '0');
     if (def.type === 'drift' || def.type === 'ring') {
-      chGoalEl.textContent = def.type === 'ring'
+      const goalNow = Math.round((def.goal || 0) * (DIFFS[phaseState.diff] || DIFFS[1]).goalMul);
+      chGoalEl.textContent = (def.type === 'ring'
         ? (phaseState.inside ? 'Derrape dentro do circulo — o chao solta sozinho' : 'Volte para o circulo!')
-        : 'Derrape livre pela cidade: encere e segure o espaco';
-      chProgEl.textContent = Math.round(phaseState.progress) + ' / ' + def.goal + ' pts';
-      chBarEl.style.width = clamp(phaseState.progress / def.goal, 0, 1) * 100 + '%';
+        : 'Derrape livre pela cidade: encere e segure o espaco') + ' · ' + DIFFS[phaseState.diff].key;
+      chProgEl.textContent = Math.round(phaseState.progress) + ' / ' + goalNow + ' pts';
+      chBarEl.style.width = clamp(phaseState.progress / goalNow, 0, 1) * 100 + '%';
       chLivesEl.textContent = 'combo x' + scoreState.combo;
     } else if (def.type === 'gates') {
       chGoalEl.textContent = 'Portal ' + Math.min(phaseState.gate + 1, def.gates.length) + ' de ' + def.gates.length + ' — siga a seta';
@@ -2725,10 +3141,10 @@ function present(dt) {
       chLivesEl.textContent = 'chegue no anel iluminado';
     } else if (def.type === 'chase') {
       const alive = enemies.filter((e) => e.alive).length;
-      chGoalEl.textContent = 'Aguente a caca — rivais vivos: ' + alive;
+      chGoalEl.textContent = 'Aguente a caca (' + DIFFS[phaseState.diff].key + ') — rivais vivos: ' + alive;
       chProgEl.textContent = (enemies.length - alive) + ' / ' + enemies.length + ' destruidos';
-      chBarEl.style.width = clamp(1 - phaseState.t / def.time, 0, 1) * 100 + '%';
-      chLivesEl.textContent = '♥'.repeat(phaseState.lives) + '♡'.repeat(Math.max(0, 3 - phaseState.lives));
+      chBarEl.style.width = clamp(1 - phaseState.t / (def.time * (DIFFS[phaseState.diff] || DIFFS[1]).timeMul), 0, 1) * 100 + '%';
+      chLivesEl.textContent = '♥'.repeat(phaseState.lives) + '♡'.repeat(Math.max(0, 8 - phaseState.lives));
     }
   }
   frameCount++;
@@ -2812,6 +3228,7 @@ if (params.has('debug')) {
       if (s !== undefined) state.speed = s;
     },
     carState: () => [car.position.x, car.position.z, state.y, state.vy, state.airborne],
+    groundAt: (x, z) => groundHeightAt(x, z),
     setAir: (x, z, y, heading, speed) => {
       car.position.x = x; car.position.z = z;
       state.y = y; state.vy = 0; state.airborne = true;
@@ -2824,9 +3241,9 @@ if (params.has('debug')) {
     phases,
     phaseState,
     enemies,
-    startPhase: (id) => {
+    startPhase: (id, diff) => {
       const p = phases.find((x) => x.def.id === id || x.def.name === String(id).toUpperCase());
-      if (p) startPhase(p);
+      if (p) startPhase(p, diff);
       return p ? p.def.id : null;
     },
     phaseStatus: (id) => {

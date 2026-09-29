@@ -70,6 +70,10 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
   só dispara no sentido de subida — o paredão segura o carro como um muro,
   inclusive de marcha à ré e **chegando pelo ar**; atacar pela lateral ou por
   trás **não atravessa** a rampa, o carro bate e para na face)
+- **Looping estilo Hot Wheels** (perto da praça `36, 36`): entre com velocidade
+  (~91 km/h) e o tubo circular te carrega de cabeça para baixo — cada volta
+  completa vale **+800**. Quem vai devagar demais despenca no ponto crítico
+  (física real de laço: `v² ≥ 2g·2R`)
 - **Orla sólida**: os prédios do skyline no fim das avenidas agora têm colisão —
   não dá mais para entrar no meio deles
 - **Som procedural** (WebAudio, sem arquivos): motor que responde à
@@ -81,6 +85,14 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
 - **Visual mais rico**: prédios com tons variados e **coroa neon no topo**,
   placas luminosas nas fachadas, **guias neon nas bordas das ruas**, pintura com
   verniz (clearcoat), rodas com aro de 5 raios e fita de neon nas saias do carro
+- **Céu com estrelas e lua** (1300 estrelas, cúpula em gradiente roxo — custo
+  zero por frame), névoa azulada e **reflexos de cidade neon** no metal/vidro do
+  carro (ambiente PMREM procedural de skyline noturno)
+- **Acabamento de pós-processamento**: bloom mais forte, **vinheta**,
+  **aberração cromática** e leve saturação (sintetizados num único shader barato;
+  no celular vira só vinheta)
+- **Farol volumétrico** e **luz azul do nitro** no carro (desligados no
+  LOW_END para economizar luzes)
 - **Minimapa** em tempo real com praças, rampas, trânsito, fases (anel amarelo =
   bloqueada, verde = concluída) e rivais da caçada
 - **HUD** com velocidade, nitro, pontos/combo, progresso e painel do repositório
@@ -110,22 +122,41 @@ recorde de pontos antes que o tempo acabe.
 ## Fases
 
 Espalhados pela cidade existem **cinco círculos de fase**. Chegue em cima de um
-deles: o HUD mostra o desafio e **E** (ou o toque em *começar o desafio*) troca a
-exploração pelo desafio. Cada fase tem objetivo, cronômetro e recompensa
-próprios, e as seguintes **abrem conforme a sua pontuação**.
+deles: o HUD mostra o desafio e você escolhe a **dificuldade** (FÁCIL/MÉDIO/DIFÍCIL,
+botões no painel ou teclas **1/2/3**; **E** começa no médio). Cada fase tem
+objetivo, cronômetro e recompensa próprios, e as seguintes **abrem conforme a
+sua pontuação**.
 
 | # | Fase | Tipo | Objetivo | Libera com |
 |---|---|---|---|---|
 | 1 | AQUECIMENTO | derrapagem | 600 pontos de drift em 60 s | sempre aberta |
 | 2 | CIRCUITO NEON | portais | passar pelos 5 portais em ordem | 1.500 pts |
 | 3 | ZONA DE DRIFT | pista que solta | 1.500 pontos dentro do círculo | 4.000 pts |
-| 4 | CAÇADA | rivais | aguentar 50 s (3 vidas) ou destruir os 3 rivais | 8.000 pts |
+| 4 | CAÇADA | rivais | aguentar 50 s ou destruir os rivais | 8.000 pts |
 | 5 | SEGV // ARENA | chefão | derrotar SEGV no centro da cidade | 15.000 pts |
+
+### Dificuldade
+
+| Nível | Recompensa | O que muda |
+|---|---|---|
+| FÁCIL · x1 | recompensa base | +25% de tempo, metas 20% menores, 5 vidas na caçada, SEGV com 70 de vida e mais lento |
+| MÉDIO · x2 | **recompensa x2** | o jogo como foi balanceado: 3 vidas, SEGV com 100 de vida |
+| DIFÍCIL · x3 | **recompensa x3** | −20% de tempo, metas 25% maiores, **1 vida**, **5 rivais** mais rápidos (4 de vida cada), SEGV com **150 de vida** e mais rápido |
+
+- A dificuldade escolhida fica salva (`francos-repo-racer-diff` no `localStorage`)
+  e vale para a próxima fase também.
+- **Fugir em linha reta não funciona mais**: rivais e o SEGV *antecipam* o ponto
+  para onde você vai (interpolação da sua velocidade) e os rivais **flanqueiam**
+  (cortam caminho por lados alternados) — escape derrapando e mudando de direção.
+- O SEGV agora **desvia de prédios** (sonda 3 pontos à frente e escolhe o lado
+  livre) — sem mais travar nos quarteirões; nas cargas ele ainda pode se acidentar,
+  e isso continua tirando vida dele.
 
 - O desbloqueio olha a **melhor pontuação** (a que fica salva no navegador), então
   a progressão continua entre partidas; as fases concluídas ficam em
   `francos-repo-racer-phases` (`localStorage`).
-- Fases concluídas podem ser **repetidas** — a recompensa vale de novo.
+- Fases concluídas podem ser **repetidas** — a recompensa vale de novo (multiplicada
+  pela dificuldade escolhida).
 - Na **zona de drift** o chão solta de verdade (aderência reduzida) e o combo
   sobe sem precisar do freio de mão; fora do círculo não conta.
 - Na **caçada**, bata nos rivais enquanto eles estão em *recuperação* para
