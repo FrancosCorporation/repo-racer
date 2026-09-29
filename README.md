@@ -48,6 +48,10 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
 - **Nitro (Shift)** com barra de recarga, chamas no escapamento e FOV dinâmico
 - **Freio de mão (Espaço)** que derrapa de verdade: segure perto da curva para
   escorregar a traseira com fumaça e marcas de pneu
+- **Drift boosting estilo kart**: derrapar carrega um turbo grátis — solte o
+  freio de mão após ~0,9 s de cantada e ganhe **+22 de impulso** ("TURBO DE
+  DRIFT!"); segure 1,8 s para o **SUPER TURBO** (+38). A carga some se você
+  bater ou parar de derrapar sem completar
 - **Pontuação de drift com combo até x8** — a cadeia de derrapagem acumula
   pontos ao vivo; bater no muro ou no trânsito perde a cadeia ("COMBO
   PERDIDO!") e o recorde de pontos fica salvo no navegador
@@ -65,7 +69,8 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
   desbloqueio por pontuação (veja [Fases](#fases))
 - **Trânsito com colisão**: carros circulam pelas avenidas e te atrapalham —
   agora com rodas, cabine escura e faixa de vidro, e **sem escalar as rampas**
-  (as faixas foram para fora do vão das rampas e o trânsito ignora o relevo)
+  (as faixas foram para fora do vão das rampas e o trânsito ignora o relevo).
+  À noite os **faróis ficam acesos** e as **setas amarelas piscam**
 - **Rampas com física de pulo**: decole, voe e aterrisse com fumaça (o salto
   só dispara no sentido de subida — o paredão segura o carro como um muro,
   inclusive de marcha à ré e **chegando pelo ar**; atacar pela lateral ou por
@@ -73,7 +78,9 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
 - **Looping estilo Hot Wheels** (perto da praça `36, 36`): entre com velocidade
   (~91 km/h) e o tubo circular te carrega de cabeça para baixo — cada volta
   completa vale **+800**. Quem vai devagar demais despenca no ponto crítico
-  (física real de laço: `v² ≥ 2g·2R`)
+  (física real de laço: `v² ≥ 2g·2R`). **8 orbes** brilhantes ao longo do laço
+  valem **+200 cada**, e o **melhor tempo de volta** fica salvo no navegador —
+  bater o recorde dispara o toast "NOVO RECORDE DE VOLTA!"
 - **Orla sólida**: os prédios do skyline no fim das avenidas agora têm colisão —
   não dá mais para entrar no meio deles
 - **Som procedural** (WebAudio, sem arquivos): motor que responde à
@@ -85,6 +92,16 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
 - **Visual mais rico**: prédios com tons variados e **coroa neon no topo**,
   placas luminosas nas fachadas, **guias neon nas bordas das ruas**, pintura com
   verniz (clearcoat), rodas com aro de 5 raios e fita de neon nas saias do carro
+- **Janelas que piscam devagar**: o brilho das janelas dos prédios respira em
+  ritmos defasados por quarteirão (custo zero: só o `emissiveIntensity` de 8
+  materiais compartilhados)
+- **Poças refletivas** nas avenidas: manchas de asfalto molhado com metalness
+  alto que espelham a cidade neon (120 no desktop, poucas no celular)
+- **Dano cosmético**: bater amassa o **para-choque dianteiro** de verdade (ele
+  encolhe e afunda a cada batida) e solta **faíscas** que quicam no chão; o
+  carro sai da oficina renovado a cada nova corrida
+- **Sombras de contato fake** sob os rivais e o chefão SEGV: manchas escuras
+  ancoram os carros no chão — a do SEGV é quase do tamanho dele
 - **Céu com estrelas e lua** (1300 estrelas, cúpula em gradiente roxo — custo
   zero por frame), névoa azulada e **reflexos de cidade neon** no metal/vidro do
   carro (ambiente PMREM procedural de skyline noturno)
@@ -195,7 +212,8 @@ https://francoscorporation.github.io/repo-racer/
   cena em testes (`setCar`, `setAir`, `step`, `carState`, `startPhase`,
   `phaseState`, `phaseStatus`, `enemies`, `startBoss`, `getBoss`, `damageBoss`,
   `hurtPlayer`, `bossEnd`, `resetScore`, `resetProgress`, `keys`, `traffic`,
-  `buildings`)
+  `buildings`, `sparksCount`, `bumperDent`, `puddles`, `windowGlow`,
+  `bossBlob`, `blinkerMat`, `loopCoins`)
 - **GitHub Pages** — hospedagem estática
 
 ## Rodar localmente

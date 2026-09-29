@@ -585,6 +585,42 @@ for (const r of ROADS) {
   scene.add(h);
 }
 
+/* --- poças refletivas nas ruas: manchas brilhantes fixas que recebem
+   o reflexo do ambiente — baratas (1 draw cada) e mudam o visual todo --- */
+const puddleTex = makeRadialTexture('rgba(150,190,220,0.5)', 'rgba(90,130,170,0.28)', 'rgba(40,60,90,0)');
+const puddleGeoV = new THREE.PlaneGeometry(2.6, 9);
+puddleGeoV.rotateX(-Math.PI / 2);
+const puddleGeoH = new THREE.PlaneGeometry(9, 2.6);
+puddleGeoH.rotateX(-Math.PI / 2);
+const puddleMat = new THREE.MeshStandardMaterial({
+  map: puddleTex, transparent: true, opacity: 0.5,
+  roughness: 0.04, metalness: 0.9, envMapIntensity: 2.4, depthWrite: false
+});
+const PUD_N = LOW_END ? 6 : 12; // mobile: menos manchas (cada uma e 1 draw)
+const puddlesZ = [];
+const puddlesX = [];
+for (let i = 0; i < PUD_N; i++) {
+  puddlesZ.push(-190 + rand() * 380);
+  puddlesX.push(-190 + rand() * 380);
+}
+let puddlePlaced = 0; // (exposto no __rr para o smoke test)
+for (const r of ROADS) {
+  for (const z of puddlesZ) {
+    const p = new THREE.Mesh(puddleGeoV, puddleMat);
+    p.position.set(r + (rand() - 0.5) * 7.4, 0.022, z);
+    p.renderOrder = 1;
+    scene.add(p);
+    puddlePlaced++;
+  }
+  for (const x of puddlesX) {
+    const p = new THREE.Mesh(puddleGeoH, puddleMat);
+    p.position.set(x, 0.023, r + (rand() - 0.5) * 7.4);
+    p.renderOrder = 1;
+    scene.add(p);
+    puddlePlaced++;
+  }
+}
+
 function makeWindowTexture() {
   const w = 128, h = 256;
   const canvas = document.createElement('canvas');
@@ -610,6 +646,8 @@ function makeWindowTexture() {
   return tex;
 }
 const windowTextures = Array.from({ length: 5 }, makeWindowTexture);
+// fase de piscada por textura: cada grupo de predios pisca num ritmo proprio
+for (const wt of windowTextures) wt.blinkSeed = rand() * Math.PI * 2;
 // tonalidades variadas de concreto/vidro + janelas mais vivas = skyline menos monotona
 const BUILDING_TINTS = [0x11161f, 0x1a1522, 0x101c24, 0x1d1526, 0x121a2c, 0x0f1b1a, 0x1c1a14, 0x141c28];
 const buildingMats = BUILDING_TINTS.map((tint, i) => new THREE.MeshStandardMaterial({
@@ -617,6 +655,16 @@ const buildingMats = BUILDING_TINTS.map((tint, i) => new THREE.MeshStandardMater
   map: windowTextures[i % windowTextures.length], emissiveMap: windowTextures[i % windowTextures.length],
   emissive: 0xffffff, emissiveIntensity: 0.62, envMapIntensity: 0.75
 }));
+// janelas piscando: cada material de predio respira suavemente no tempo
+// (muda so o emissiveIntensity do material compartilhado: custo zero)
+const windowClock = { t: 0 };
+function updateWindowBlink(dt) {
+  windowClock.t += dt;
+  for (let i = 0; i < buildingMats.length; i++) {
+    const seed = windowTextures[i % windowTextures.length].blinkSeed || 0;
+    buildingMats[i].emissiveIntensity = 0.56 + Math.sin(windowClock.t * 1.7 + seed) * 0.18;
+  }
+}
 
 const RAMP_DEFS = [[0, -100, -Math.PI / 2], [0, 100, Math.PI / 2], [-100, 0, 0], [100, 0, Math.PI]];
 const buildings = [];
@@ -742,6 +790,11 @@ for (const [rx, rz, rotY] of RAMP_DEFS) {
 
 let loopGround = null; // altura do tubo do looping (definido no bloco abaixo)
 let loopLaps = 0;
+let loopLapStart = -1;
+let loopBestFlash = 0;
+let loopBestShown = false; // garante 1 toast por recorde (reset no restart)
+const loopCoins = [];
+const LOOP_BEST_KEY = 'francos-repo-racer-loopbest';
 /* --- LOOPING estilo Hot Wheels ---
    Um tubo em circulo completo (raio R, centro a R do chao): quem entra com
    velocidade percorre o laco de cabeco, quem vai devagar despenca no ponto
@@ -817,6 +870,18 @@ const LOOP = { x: 36, z: 36, R: 11, W: 9 };
     if (Math.abs(dzz) > 3) return -1;
     return LOOP.R - Math.sqrt(LOOP.R * LOOP.R - dzz * dzz);
   };
+  // coletaveis DENTRO do laco: 8 orbes no mesmo caminho do passeio — valer
+  // +200 cada obriga a entrar no tubo so pra faze-los
+  const coinMat = new THREE.MeshBasicMaterial({ color: 0xffd54f, toneMapped: false });
+  const coinGeo = new THREE.TorusGeometry(0.55, 0.17, 8, 20);
+  for (let k = 0; k < 8; k++) {
+    const A = (k / 8) * Math.PI * 2;
+    const coin = new THREE.Mesh(coinGeo, coinMat);
+    coin.position.set(LOOP.x, LOOP.R - Math.cos(A) * LOOP.R - 0.9, LOOP.z + Math.sin(A) * LOOP.R);
+    coin.rotation.y = Math.PI / 2;
+    scene.add(coin);
+    loopCoins.push({ mesh: coin, a: A, taken: false });
+  }
   loopLaps = 0;
 }
 
@@ -1288,6 +1353,13 @@ function makeEnemyCar() {
   const light = new THREE.PointLight(0xff2d55, 3, 18, 2);
   light.position.y = 1.4;
   g.add(light);
+  // sombra de contato fake: ancora o rival no chao (o carro do jogador ja tem a sua)
+  const blob = new THREE.Mesh(blobGeo, new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, opacity: 0.55, depthWrite: false }));
+  blob.scale.setScalar(0.92);
+  blob.position.y = 0.05;
+  blob.renderOrder = 2;
+  scene.add(blob);
+  g.userData.blob = blob;
   scene.add(g);
   return g;
 }
@@ -1307,7 +1379,10 @@ function spawnEnemies(def) {
   }
 }
 function clearEnemies() {
-  for (const e of enemies) scene.remove(e.mesh);
+  for (const e of enemies) {
+    scene.remove(e.mesh);
+    if (e.mesh.userData.blob) scene.remove(e.mesh.userData.blob); // sombra fake sai junto
+  }
   enemies.length = 0;
 }
 function hurtPlayerInPhase() {
@@ -1382,6 +1457,11 @@ function updateEnemies(dt) {
     e.mesh.position.set(e.x, 0, e.z);
     e.mesh.rotation.y = e.heading;
     e.mesh.rotation.z = -e.lean;
+    const eb = e.mesh.userData.blob;
+    if (eb) {
+      eb.visible = e.alive;
+      eb.position.set(e.x, 0.05, e.z);
+    }
     if (e.flashT > 0) e.mesh.position.y = 0.12 + Math.sin(e.flashT * 60) * 0.06;
     if (dist < 3.6 && e.hitCd <= 0) {
       e.hitCd = 0.9;
@@ -1398,6 +1478,7 @@ function updateEnemies(dt) {
         if (e.hp <= 0) {
           e.alive = false;
           e.mesh.visible = false;
+          if (e.mesh.userData.blob) e.mesh.userData.blob.visible = false;
           spawnSmoke(e.x, e.z);
           toast('RIVAL DESTRUIDO!  +350', '#ffd54f');
         } else {
@@ -1665,10 +1746,14 @@ for (const sx of [-0.99, 0.99]) {
 // fita de neon nas saias laterais (a cor acompanha o carro escolhido)
 const underglowMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, toneMapped: false, transparent: true, opacity: 0.9 });
 for (const sx of [-1.02, 1.02]) {
-  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 2.4), underglowMat);
-  strip.position.set(sx, 0.22, 0);
-  carBody.add(strip);
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 2.4), underglowMat);    strip.position.set(sx, 0.22, 0);
+    carBody.add(strip);
 }
+// para-choque dianteiro propio: e ele que amassa quando o carro bate
+const bumper = new THREE.Mesh(new RoundedBoxGeometry(1.78, 0.2, 0.22, 2, 0.06), paintDark);
+bumper.position.set(0, 0.38, 2.0);
+bumper.castShadow = true;
+carBody.add(bumper);
 
 // aro com 5 raios escuros sobre o disco claro + tampao luminoso no centro
 const spokeGeo = new THREE.BoxGeometry(0.05, 0.2, 0.055);
@@ -1792,6 +1877,8 @@ scene.add(car);
 const trafficWheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.28, 12);
 trafficWheelGeo.rotateZ(Math.PI / 2);
 const trafficWheelMat = new THREE.MeshStandardMaterial({ color: 0x0a0c10, roughness: 0.95, metalness: 0.1 });
+// lanternas de seta do transito: piscam devagar (compartilhado entre os carros)
+const blinkerMat = new THREE.MeshBasicMaterial({ color: 0xffa726, toneMapped: false });
 function makeTrafficCar(color) {
   const group = new THREE.Group();
   const paintMat = new THREE.MeshStandardMaterial({ color, metalness: 0.75, roughness: 0.3, envMapIntensity: 1.3 });
@@ -1829,6 +1916,10 @@ function makeTrafficCar(color) {
     const tail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.08), tailMat);
     tail.position.set(hx, 0.7, -1.82);
     group.add(tail);
+    // setinhas amarelas piscando nas quinas do carro
+    const blinker = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.08), blinkerMat);
+    blinker.position.set(hx + Math.sign(hx) * 0.28, 0.7, 1.82);
+    group.add(blinker);
   }
   return group;
 }
@@ -1861,6 +1952,61 @@ for (let i = 0; i < 46; i++) {
   smokes.push({ sprite, life: 0 });
 }
 let smokeTimer = 0;
+/* --- faíscas de batida (pool de 40 sprites, custo zero quando ociosas) --- */
+const sparks = [];
+for (let i = 0; i < 40; i++) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flameTex, color: 0xffc36b, transparent: true, opacity: 0,
+    depthWrite: false, toneMapped: false
+  }));
+  sp.visible = false;
+  sp.scale.setScalar(0.5);
+  scene.add(sp);
+  sparks.push({ sp, vx: 0, vy: 0, vz: 0, life: 0 });
+}
+function spawnSparks(x, z, n = 7) {
+  let placed = 0;
+  for (const s of sparks) {
+    if (s.life > 0) continue;
+    s.life = 0.35 + rand() * 0.3;
+    s.sp.visible = true;
+    s.sp.position.set(x + (rand() - 0.5) * 0.6, 0.5 + rand() * 0.5, z + (rand() - 0.5) * 0.6);
+    const a = rand() * Math.PI * 2;
+    const v = 4 + rand() * 9;
+    s.vx = Math.cos(a) * v; s.vz = Math.sin(a) * v; s.vy = 3 + rand() * 6;
+    if (++placed >= n) break;
+  }
+}
+function updateSparks(dt) {
+  for (const s of sparks) {
+    if (s.life <= 0) continue;
+    s.life -= dt;
+    s.vy -= 22 * dt;
+    s.sp.position.x += s.vx * dt;
+    s.sp.position.y += s.vy * dt;
+    s.sp.position.z += s.vz * dt;
+    if (s.sp.position.y < 0.05) { s.sp.position.y = 0.05; s.vy *= -0.4; s.vx *= 0.6; s.vz *= 0.6; }
+    s.sp.material.opacity = Math.min(1, s.life * 3);
+    if (s.life <= 0) s.sp.visible = false;
+  }
+}
+/* --- dano cosmético: o para-choque dianteiro amassa ao bater --- */
+let bumperBaseY = bumper.position.y;
+let bumperBaseZ = bumper.position.z;
+let bumperDent = 0;
+function squashBumper() {
+  bumperDent = Math.min(1, bumperDent + 0.34);
+  bumper.scale.y = 1 - bumperDent * 0.55;
+  bumper.position.y = bumperBaseY - bumperDent * 0.12;
+  bumper.position.z = bumperBaseZ - bumperDent * 0.3;
+}
+function resetBumper() {
+  bumperDent = 0;
+  bumper.scale.y = 1;
+  bumper.position.y = bumperBaseY;
+  bumper.position.z = bumperBaseZ;
+}
+
 function spawnSmoke(x, z) {
   const s = smokes.find((sm) => sm.life <= 0);
   if (!s) return;
@@ -1951,6 +2097,13 @@ function makeBossMesh() {
   halo.scale.set(5, 5, 1);
   halo.position.set(0, 3.9, 0.5);
   group.add(halo);
+  // sombra de contato fake do chefao: ele e GRANDE, a sombra tambem e
+  const blob = new THREE.Mesh(blobGeo, new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, opacity: 0.6, depthWrite: false }));
+  blob.scale.setScalar(1.7);
+  blob.position.y = 0.06;
+  blob.renderOrder = 2;
+  scene.add(blob);
+  group.userData.blob = blob;
   const beacon = new THREE.PointLight(0xff1733, 6, 34, 2);
   beacon.position.set(0, 4.2, 0.5);
   group.add(beacon);
@@ -1976,6 +2129,7 @@ function startBoss() {
   if (state.bossActive || bossResult === 'win') return;
   if (!bossMesh) bossMesh = makeBossMesh();
   if (bossMesh.group.parent !== scene) scene.add(bossMesh.group);
+  if (bossMesh.group.userData.blob) bossMesh.group.userData.blob.visible = true;
   let sx = 0, sz = 160, far = -1;
   for (const [px, pz] of [[0, 160], [0, -160], [160, 0], [-160, 0]]) {
     const d = Math.hypot(px - car.position.x, pz - car.position.z);
@@ -2039,7 +2193,10 @@ function bossEnd(win, reason) {
   state.bossActive = false;
   bossResult = win ? 'win' : 'lose';
   if (boss) boss.alive = false;
-  if (bossMesh) bossMesh.group.visible = false;
+  if (bossMesh) {
+    bossMesh.group.visible = false;
+    if (bossMesh.group.userData.blob) bossMesh.group.userData.blob.visible = false;
+  }
   document.getElementById('bosshud').classList.remove('show');
   const title = document.getElementById('done-title');
   const sub1 = document.getElementById('done-sub1');
@@ -2178,6 +2335,10 @@ function updateBoss(dt) {
     : b.mode === 'recover' ? 0.6 : 3;
   m.eyeMat.emissiveIntensity = b.flashT > 0 ? 9 : pulse;
   m.stripeMat.emissiveIntensity = b.flashT > 0 ? 9 : (b.mode === 'recover' ? 0.8 : 2.4);
+  if (m.group.userData.blob) {
+    m.group.userData.blob.visible = b.alive;
+    m.group.userData.blob.position.set(b.x, 0.06, b.z);
+  }
 }
 
 const skidGeo = new THREE.PlaneGeometry(0.34, 0.9);
@@ -2310,7 +2471,7 @@ function visitChime() {
 function pickupBlip() { tone(560, 0.14, { freqEnd: 1120, gain: 0.06 }); }
 function comboBlip(combo) { tone(480 + combo * 90, 0.07, { gain: 0.05 }); }
 
-const state = { speed: 0, heading: 0, steer: 0, slip: 0, moveH: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, looping: false, nitro: 1, boosting: false, started: false, startTime: 0, finished: false, bossActive: false };
+const state = { speed: 0, heading: 0, steer: 0, slip: 0, moveH: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, looping: false, driftCharge: 0, driftBoost: 0, loopA: 0, nitro: 1, boosting: false, started: false, startTime: 0, finished: false, bossActive: false };
 const stats = { accel: 1, max: 34, grip: 1 };
 car.position.set(0, 0, -34);
 car.rotation.y = 0;
@@ -2390,6 +2551,8 @@ function applyCarChoice() {
 function startGame() {
   if (state.started) return;
   applyCarChoice();
+  resetBumper(); // nova corrida: carro novinho (sem amassado de sessao passada)
+  loopBestShown = false;
   state.started = true;
   state.startTime = performance.now();
   initAudio();
@@ -2501,6 +2664,8 @@ function onCrash() {
   if (crashCd <= 0) {
     thud();
     crashCd = 0.45;
+    spawnSparks(car.position.x + Math.sin(state.heading) * 1.8, car.position.z + Math.cos(state.heading) * 1.8);
+    squashBumper(); // dano cosmético: o para-choque amassa de verdade
   }
 }
 
@@ -2705,6 +2870,8 @@ function update(dt) {
   } else {
     state.speed *= Math.exp(-FRICTION * dt);
     state.boosting = false;
+    state.driftCharge = 0;
+    state.driftBoost = 0;
   }
 
   // escorregao real: moveH (trajetoria) persegue heading (frente) com atraso = deslize;
@@ -2751,12 +2918,35 @@ function update(dt) {
         state.looping = true;
         state.loopA = 0; // ponto mais baixo do tubo
         loopLaps = 0;
+        loopLapStart = performance.now();
       }
     }
     if (state.looping) {
       const w = Math.abs(state.speed) / LOOP.R; // velocidade angular real do motor
       state.loopA += w * dt;
+      // orbes do laco: coleta por proximidade angular (mesma referencia do passeio)
+      for (const c of loopCoins) {
+        if (c.taken) continue;
+        if (Math.abs(state.loopA - c.a) < 0.5 || Math.abs(state.loopA - c.a) > Math.PI * 2 - 0.5) {
+          c.taken = true;
+          c.mesh.visible = false;
+          scoreState.total += 200;
+          pickupBlip();
+          toast('ORBE DO LACO  +200', '#ffd54f');
+        }
+      }
       if (state.loopA >= Math.PI * 2) {
+        // cronometro so no FIM da volta: medir no inicio gravaria um recorde
+        // falso de um frame
+        if (loopLapStart >= 0) {
+          const lapT = (performance.now() - loopLapStart) / 1000;
+          const best = Number(localStorage.getItem(LOOP_BEST_KEY) || 0);
+          if (!best || lapT < best) {
+            try { localStorage.setItem(LOOP_BEST_KEY, String(lapT)); } catch (e) { /* sem storage */ }
+            loopBestFlash = 1.2;
+          }
+          loopLapStart = -1;
+        }
         // completou a volta: solta no chao no ponto mais baixo, seguindo norte
         loopLaps++;
         scoreState.total += 800;
@@ -2936,6 +3126,31 @@ function update(dt) {
   }
   smokeTimer -= dt;
   skidTimer -= dt;
+  /* --- DRIFT BOOSTING (estilo kart): derrapar carrega um turbo gratis ---
+     Faixa 1 (amarela, 0.9s de cantada): +22 de impulso. Faixa 2 (laranja,
+     1.8s): +38. Solta o freio de mao e o boost dispara sozinho. */
+  if (drifting && state.y < 0.2 && !state.looping) {
+    state.driftCharge = Math.min(3.2, state.driftCharge + dt);
+  } else if (!state.looping) {
+    if (state.driftCharge >= 0.9 && state.driftCharge < 1.8) {
+      state.driftBoost = Math.max(state.driftBoost, 1);
+      tone(760, 0.14, { gain: 0.06 });
+      tone(980, 0.16, { gain: 0.06, delay: 0.08 });
+      toast('TURBO DE DRIFT!', '#ffd54f');
+    } else if (state.driftCharge >= 1.8) {
+      state.driftBoost = Math.max(state.driftBoost, 2);
+      tone(760, 0.14, { gain: 0.07 });
+      tone(980, 0.14, { gain: 0.07, delay: 0.08 });
+      tone(1240, 0.2, { gain: 0.07, delay: 0.16 });
+      toast('SUPER TURBO!', '#ff8c42');
+    }
+    state.driftCharge = 0;
+  }
+  if (state.driftBoost > 0 && Math.abs(state.speed) > 4) {
+    state.speed += (state.driftBoost === 2 ? 38 : 22) * dt * Math.sign(state.speed || 1);
+    state.driftBoost = Math.max(0, state.driftBoost - dt * 0.9);
+    state.boosting = true; // acende a chama do escape
+  }
   if (drifting && state.y < 0.2) {
     if (smokeTimer <= 0) {
       smokeTimer = 0.045;
@@ -2951,12 +3166,31 @@ function update(dt) {
   for (const s of smokes) {
     if (s.life > 0) {
       s.life -= dt * 1.1;
-      s.sprite.material.opacity = Math.max(0, s.life) * 0.5;
-      s.sprite.scale.multiplyScalar(1 + dt * 1.6);
+      s.sprite.material.opacity = Math.max(0, s.life) * 0.5;      s.sprite.scale.multiplyScalar(1 + dt * 1.6);
       s.sprite.position.y += dt * 0.7;
       if (s.life <= 0) s.sprite.visible = false;
     }
   }
+  updateSparks(dt);
+  updateWindowBlink(dt);
+  if (loopBestFlash > 0) {
+    loopBestFlash -= dt;
+    if (loopBestShown === false) {
+      loopBestShown = true;
+      toast('NOVO RECORDE DE VOLTA!', '#39ff88');
+      tone(880, 0.16, { gain: 0.07 });
+      tone(1174, 0.2, { gain: 0.07, delay: 0.1 });
+    }
+    if (loopBestFlash <= 0) loopBestShown = false;
+  }
+  // piscada das setas do transito (material compartilhado: 1 conta so)
+  const blinkOn = Math.sin(performance.now() * 0.0055) > 0.3;
+  blinkerMat.color.setRGB(
+    0.08 + (blinkOn ? 0.92 : 0.06),
+    0.06 + (blinkOn ? 0.62 : 0.04),
+    0.02 + (blinkOn ? 0.1 : 0.02)
+  );
+
   for (const s of skids) {
     if (s.life > 0) {
       s.life -= dt * 0.16;
@@ -3259,6 +3493,15 @@ if (params.has('debug')) {
     },
     resetProgress: () => { phaseDone.length = 0; savePhaseDone(); },
     clearTraffic: () => { for (const t of traffic) { t.speed = 0; t.mesh.position.set(200, 0, 200); } },
+    sparksCount: () => sparks.reduce((a, s) => a + (s.life > 0 ? 1 : 0), 0),
+    bumperDent: () => bumperDent,
+    puddles: () => puddlePlaced,
+    windowGlow: () => buildingMats[0].emissiveIntensity,
+    bossBlob: () => bossMesh && bossMesh.group.userData.blob
+      ? { vis: bossMesh.group.userData.blob.visible, x: bossMesh.group.userData.blob.position.x, z: bossMesh.group.userData.blob.position.z }
+      : null,
+    blinkerMat,
+    loopCoins,
     step: (n = 1) => { for (let i = 0; i < n; i++) { update(FIXED_DT); present(FIXED_DT); } },
   };
 }
