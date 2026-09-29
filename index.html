@@ -30,16 +30,18 @@
   #stats .row { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; font-size: 12px; color: #9fb8cc; }
   #nitro-wrap { margin-top: 6px; height: 7px; background: rgba(255,255,255,.08); border-radius: 4px; overflow: hidden; }
   #nitro { height: 100%; width: 100%; background: linear-gradient(90deg, #00e5ff, #7c4dff); transition: width .1s linear; }
-  #minimap { position: absolute; top: 232px; right: 14px; border-radius: 12px; opacity: .92; }
+  #minimap { position: absolute; top: 232px; right: 14px; border-radius: 12px; opacity: .92; border: 1px solid rgba(0,229,255,.18); box-shadow: 0 6px 24px rgba(0,0,0,.4); }
   #way { top: 154px; right: 14px; min-width: 176px; text-align: right; padding: 8px 12px; display: none; }
   #way.show { display: block; }
   #way .label { font-size: 10px; letter-spacing: 1px; color: #7f97ab; }
-  #way .arrow { display: block; width: 26px; margin: 2px 0 0 auto; font-size: 22px; line-height: 1; color: var(--green); text-shadow: 0 0 12px rgba(57,255,136,.85); transition: transform .1s linear; }
+  /* seta 2D aposentada: a navegacao agora e um holograma 3D flutuando na cena */
+  #way .arrow { display: none; }
   #way .dist { font-size: 12px; color: #cfe6f5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .score-row { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; font-size: 12px; color: #9fb8cc; }
-  #score { color: #ffd54f; font-size: 18px; text-shadow: 0 0 12px rgba(255,213,79,.65); }
-  #combo { color: var(--magenta); font-weight: bold; text-shadow: 0 0 10px rgba(255,45,149,.85); }
-  #combo.hot { font-size: 16px; }
+  #score { color: #ffd54f; font-size: 22px; text-shadow: 0 0 12px rgba(255,213,79,.65), 0 1px 0 rgba(0,0,0,.6); }
+  #combo { color: var(--magenta); font-weight: bold; text-shadow: 0 0 14px rgba(255,45,149,1); }
+  #combo.hot { font-size: 18px; animation: comboPop .3s ease; }
+  @keyframes comboPop { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
   #toast { position: fixed; top: 104px; left: 50%; transform: translateX(-50%); font-size: 15px; letter-spacing: 2px; color: var(--green); text-shadow: 0 0 14px rgba(57,255,136,.9); opacity: 0; transition: opacity .25s ease; z-index: 15; pointer-events: none; }
   #toast.show { opacity: 1; }
   #bosshud { top: 14px; left: 50%; transform: translateX(-50%); min-width: 340px; display: none; }
@@ -96,7 +98,8 @@
     z-index: 30; transition: opacity .5s ease; text-align: center; padding: 20px;
   }
   #start.hide { opacity: 0; pointer-events: none; }
-  #start .logo { font-size: 40px; letter-spacing: 10px; color: var(--cyan); text-shadow: 0 0 34px rgba(0,229,255,.9); }
+  #start .logo { font-size: 40px; letter-spacing: 10px; color: var(--cyan); text-shadow: 0 0 34px rgba(0,229,255,.9); animation: logoPulse 2.4s ease-in-out infinite; }
+  @keyframes logoPulse { 0%, 100% { text-shadow: 0 0 22px rgba(0,229,255,.6); } 50% { text-shadow: 0 0 44px rgba(0,229,255,1); } }
   #start .tag { font-size: 13px; color: #9fb8cc; max-width: 580px; line-height: 1.6; }
   #garage { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
   .car-card {
@@ -174,7 +177,6 @@
   </div>
   <div id="way" class="box">
     <span class="label"><span id="way-label">PROXIMO</span> &middot; <span id="way-dist">--</span></span>
-    <span class="arrow" id="way-arrow">&#9650;</span>
     <div id="way-name" class="dist"></div>
   </div>
   <div id="bosshud" class="box">
@@ -793,6 +795,7 @@ let loopLaps = 0;
 let loopLapStart = -1;
 let loopBestFlash = 0;
 let loopBestShown = false; // garante 1 toast por recorde (reset no restart)
+let loopLight = null; // ponto de luz animado do cenario do looping
 const loopCoins = [];
 const LOOP_BEST_KEY = 'francos-repo-racer-loopbest';
 /* --- LOOPING estilo Hot Wheels ---
@@ -801,6 +804,10 @@ const LOOP_BEST_KEY = 'francos-repo-racer-loopbest';
    de volta — ninguem atravessa a estrutura), e boca de SAIDA com portal
    neon. Entrada pelo sul, saida pelo norte. */
 const LOOP = { x: 36, z: 36, R: 11, W: 9 };
+// deck de entrada e altura (escopo do modulo: a fisica do update usa deckH).
+// z0/z1 sao RELATIVOS a LOOP.z: deckH(dz) espera dz = z - LOOP.z
+const LOOP_DECK = { z0: -21, z1: -5.5, h: 1.47 };
+const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_DECK.z0));
 {
   const cy = LOOP.R; // centro do laco: o ponto de baixo encosta no chao (y=0)
   const stripes = document.createElement('canvas');
@@ -814,34 +821,41 @@ const LOOP = { x: 36, z: 36, R: 11, W: 9 };
   stripeTex.colorSpace = THREE.SRGBColorSpace;
   stripeTex.wrapS = stripeTex.wrapT = THREE.RepeatWrapping;
   stripeTex.repeat.set(10, 1);
+  stripeTex.anisotropy = 8;
 
-  const tubeMat = new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.55, metalness: 0.45, envMapIntensity: 0.7, side: THREE.DoubleSide });
-  const tubeGeo = new THREE.CylinderGeometry(LOOP.R, LOOP.R, LOOP.W, 44, 1, true);
-  tubeGeo.rotateZ(Math.PI / 2); // eixo do tubo no eixo X do mundo
-  const tube = new THREE.Mesh(tubeGeo, tubeMat);
-  tube.position.set(LOOP.x, cy, LOOP.z);
-  tube.castShadow = true;
-  tube.receiveShadow = true;
-  scene.add(tube);
-
-  // bordas neon de cada boca do tubo (elas ficam alinhadas no eixo X):
-  // a do sul e a ENTRADA, a do norte fica acesa so depois da 1a volta
-  const edgeMats = [];
-  for (const side of [-1, 1]) {
-    const em = new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 2.6, toneMapped: false });
-    const edge = new THREE.Mesh(new THREE.TorusGeometry(LOOP.R, 0.18, 8, 48), em);
-    edge.rotation.y = Math.PI / 2;
-    edge.position.set(LOOP.x + side * (LOOP.W / 2), cy, LOOP.z);
-    scene.add(edge);
-    edgeMats.push(em);
+  // faixas viram emissiveMap: o tubo brilha por si mesmo (a textura acende)
+  const tubeMat = new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.5, metalness: 0.35, emissiveMap: stripeTex, emissive: 0xffffff, emissiveIntensity: 0.2, envMapIntensity: 0.9, side: THREE.DoubleSide });
+  /* O tubo é uma calota com DUAS JANELAS: o arco superior (de boca a boca)
+     + a "tigela" do fundo onde o piso toca o chao. As janelas inferiores sao
+     exatamente por onde a pista de ENTRADA (sul) e a de SAIDA (norte)
+     atravessam — igual ao brinquedo, a pista passa por dentro do laco. */
+  const arcGeo = (start, len) => {
+    const g = new THREE.CylinderGeometry(LOOP.R, LOOP.R, LOOP.W, 44, 1, true, start, len);
+    g.rotateZ(Math.PI / 2); // eixo do tubo no eixo X do mundo
+    return g;
+  };
+  const tubeTop = new THREE.Mesh(arcGeo(0, Math.PI), tubeMat); // arco superior
+  const tubeBowl = new THREE.Mesh(arcGeo(Math.PI * 4 / 3, Math.PI / 3), tubeMat); // tigela do fundo
+  for (const t of [tubeTop, tubeBowl]) {
+    t.position.set(LOOP.x, cy, LOOP.z);
+    t.castShadow = true;
+    t.receiveShadow = true;
+    scene.add(t);
   }
-  // grade que FECHA a boca de saida ate a primeira volta do passeio
-  const gate = new THREE.Mesh(
-    new THREE.BoxGeometry(LOOP.W, LOOP.R * 1.9, 0.16),
-    new THREE.MeshStandardMaterial({ color: 0x0c1622, metalness: 0.85, roughness: 0.3, emissive: 0x0a2a3a, emissiveIntensity: 0.5, transparent: true, opacity: 0.55 })
-  );
-  gate.position.set(LOOP.x, cy + 0.2, LOOP.z + LOOP.W / 2 + 0.1);
-  scene.add(gate);
+  // bordas neon seguindo os mesmos arcos (nas bocas leste/oeste do tubo)
+  const edgeMat = new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 2.6, toneMapped: false });
+  for (const side of [-1, 1]) {
+    const topEdge = new THREE.Mesh(new THREE.TorusGeometry(LOOP.R, 0.18, 8, 48, Math.PI), edgeMat);
+    topEdge.rotation.y = Math.PI / 2;
+    topEdge.position.set(LOOP.x + side * (LOOP.W / 2), cy, LOOP.z);
+    scene.add(topEdge);
+    const bowlGeo = new THREE.TorusGeometry(LOOP.R, 0.18, 8, 20, Math.PI / 3);
+    bowlGeo.rotateZ(Math.PI * 4 / 3);
+    const bowlEdge = new THREE.Mesh(bowlGeo, edgeMat);
+    bowlEdge.rotation.y = Math.PI / 2;
+    bowlEdge.position.set(LOOP.x + side * (LOOP.W / 2), cy, LOOP.z);
+    scene.add(bowlEdge);
+  }
 
   // pilares de apoio: 3 colunas finas do centro ate o chao + bases com luz
   const pilarMat = new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.6, metalness: 0.6 });
@@ -860,21 +874,25 @@ const LOOP = { x: 36, z: 36, R: 11, W: 9 };
     scene.add(base);
   }
 
-  // setas no chao indicando a entrada (pista ao sul da boca)
+  // setas no chao da pista de entrada (altura acompanha o deck)
   const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffb300, toneMapped: false, transparent: true, opacity: 0.85 });
+  const railMat = new THREE.MeshStandardMaterial({ color: 0xff8c1a, roughness: 0.5, metalness: 0.4, emissive: 0xff8c1a, emissiveIntensity: 0.55 });
   for (let k = 0; k < 3; k++) {
+    const az = LOOP.z - 9 - k * 4;
     const arr = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2.6, 3), arrowMat);
     arr.rotation.x = Math.PI / 2;
     arr.rotation.z = Math.PI;
-    arr.position.set(LOOP.x, 0.08, LOOP.z - 6 - k * 3.4);
+    arr.position.set(LOOP.x, deckH(az - LOOP.z) + 0.06, az);
     scene.add(arr);
   }
 
   /* --- PISTA DE ENTRADA estilo Hot Wheels (ao sul, sobe ate a boca) ---
-     Deck em rampa suave + guard-rails laranja + 2 boost pads: alinhar com a
-     boca e chegar a ~velocidade de entrada virou coisa de pista, nao de sorte */
+     O deck sobe ate 1.47 e entrega o carro DENTRO do tubo (na curva interna
+     do laco); dai ele desce a curva ate o ponto mais baixo e entra no passeio
+     com velocidade. Sem degraus, sem teleporte: pista continua de verdade. */
   {
-    const rampLen = 16, rampH = 0.55;
+    const rampLen = LOOP_DECK.z1 - LOOP_DECK.z0; // 15.5
+    const rampH = LOOP_DECK.h;                   // 1.47
     const deckShape = new THREE.Shape();
     deckShape.moveTo(-rampLen / 2, 0);
     deckShape.lineTo(rampLen / 2, 0);
@@ -882,27 +900,81 @@ const LOOP = { x: 36, z: 36, R: 11, W: 9 };
     deckShape.closePath();
     const deckGeo = new THREE.ExtrudeGeometry(deckShape, { depth: LOOP.W - 1, bevelEnabled: false });
     deckGeo.translate(0, 0, -(LOOP.W - 1) / 2);
-    const deckMat = new THREE.MeshStandardMaterial({ color: 0x1a2434, roughness: 0.6, metalness: 0.5, emissive: 0x0a2030, emissiveIntensity: 0.45 });
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0x151d2b, roughness: 0.42, metalness: 0.72, envMapIntensity: 1.0 });
     const deck = new THREE.Mesh(deckGeo, deckMat);
-    deck.position.set(LOOP.x, 0.01, LOOP.z - 3 - rampLen / 2);
-    deck.rotation.y = Math.PI; // face alta voltada para a boca do tubo
+    deck.position.set(LOOP.x, 0.01, LOOP.z - (rampLen / 2 + 5.5));
+    deck.rotation.y = -Math.PI / 2; // face alta (local +x) aponta para o tubo (+z)
     deck.castShadow = true;
     deck.receiveShadow = true;
     scene.add(deck);
-    // guard-rails laranja dos dois lados do deck (estilo pista de brinquedo)
-    const railMat = new THREE.MeshStandardMaterial({ color: 0xff8c1a, roughness: 0.5, metalness: 0.4, emissive: 0xff8c1a, emissiveIntensity: 0.55 });
+    // guard-rails laranja seguindo a subida (estilo pista de brinquedo)
+    const slope = Math.atan2(rampH, rampLen);
     for (const sx of [-1, 1]) {
-      const railGeo = new THREE.BoxGeometry(0.16, 0.5, rampLen);
-      const rail = new THREE.Mesh(railGeo, railMat);
-      rail.position.set(LOOP.x + sx * ((LOOP.W - 1) / 2 + 0.08), rampH / 2 + 0.22, LOOP.z - 3 - rampLen / 2);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, rampLen), railMat);
+      rail.position.set(LOOP.x + sx * ((LOOP.W - 1) / 2 + 0.08), rampH / 2 + 0.2, LOOP.z - 13.25);
+      rail.rotation.x = -slope; // acompanha a inclinacao do deck
       rail.castShadow = true;
       scene.add(rail);
     }
-    // faixas amarelas do deck
+    // faixas amarelas do deck (seguem a altura da rampa)
     for (let k = 0; k < 4; k++) {
+      const sz = LOOP.z - 19.5 - k * 3.7;
       const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 1.4), arrowMat);
-      stripe.position.set(LOOP.x, rampH * ((k + 0.5) / 4) + 0.03, LOOP.z - 5.5 - k * 3.6);
+      stripe.position.set(LOOP.x, deckH(sz - LOOP.z) + 0.03, sz);
       scene.add(stripe);
+    }
+  }
+
+  /* --- PISTA DE SAIDA (norte): espelho da entrada — quem completa o laco no
+     ponto mais baixo continua para o norte e desce aqui de volta a rua --- */
+  {
+    const rampLen = LOOP_DECK.z1 - LOOP_DECK.z0;
+    const rampH = LOOP_DECK.h;
+    const deckShape = new THREE.Shape();
+    deckShape.moveTo(-rampLen / 2, 0);
+    deckShape.lineTo(rampLen / 2, 0);
+    deckShape.lineTo(rampLen / 2, rampH);
+    deckShape.closePath();
+    const deckGeo = new THREE.ExtrudeGeometry(deckShape, { depth: LOOP.W - 1, bevelEnabled: false });
+    deckGeo.translate(0, 0, -(LOOP.W - 1) / 2);
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0x151d2b, roughness: 0.42, metalness: 0.72, envMapIntensity: 1.0 });
+    const deck = new THREE.Mesh(deckGeo, deckMat);
+    deck.position.set(LOOP.x, 0.01, LOOP.z + (rampLen / 2 + 5.5));
+    deck.rotation.y = Math.PI / 2; // face alta (local +x) aponta para o tubo (-z)
+    deck.castShadow = true;
+    deck.receiveShadow = true;
+    scene.add(deck);
+    const slope = Math.atan2(rampH, rampLen);
+    for (const sx of [-1, 1]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, rampLen), railMat);
+      rail.position.set(LOOP.x + sx * ((LOOP.W - 1) / 2 + 0.08), rampH / 2 + 0.2, LOOP.z + 13.25);
+      rail.rotation.x = slope; // acompanha a descida
+      rail.castShadow = true;
+      scene.add(rail);
+    }
+    for (let k = 0; k < 4; k++) {
+      const sz = LOOP.z + 19.5 + k * 3.7;
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 1.4), arrowMat);
+      stripe.position.set(LOOP.x, deckH(-(sz - LOOP.z)) + 0.03, sz);
+      scene.add(stripe);
+    }
+  }
+
+  // portais de ENTRADA/SAIDA: marcam as janelas do tubo por onde a pista passa
+  {
+    const portalGeo = new THREE.BoxGeometry(0.22, 3.6, 0.22);
+    const beamGeo = new THREE.BoxGeometry(LOOP.W + 0.8, 0.26, 0.26);
+    for (const sgn of [-1, 1]) {
+      const zz = LOOP.z + sgn * 5.5;
+      for (const sx of [-1, 1]) {
+        const post = new THREE.Mesh(portalGeo, railMat);
+        post.position.set(LOOP.x + sx * (LOOP.W / 2 + 0.1), 1.8, zz);
+        post.castShadow = true;
+        scene.add(post);
+      }
+      const beam = new THREE.Mesh(beamGeo, railMat);
+      beam.position.set(LOOP.x, 3.55, zz);
+      scene.add(beam);
     }
   }
   // letreiros ENTRADA (sul) e SAIDA (norte) em pylons neon
@@ -933,31 +1005,99 @@ const LOOP = { x: 36, z: 36, R: 11, W: 9 };
     post2.position.x = LOOP.x - 2.8;
     scene.add(post2);
   };
-  makeLoopSign('ENTRADA', 0xffb300, LOOP.z - 21.5);
+  makeLoopSign('ENTRADA', 0xffb300, LOOP.z - 24.5);
   makeLoopSign('SAIDA', 0x39ff88, LOOP.z + 21.5);
-  // boost pads na pista de entrada: 2 setas de energia que garantem oNeedV
+  // boost pads na pista de entrada: garantem a velocidade minima do laco
   var loopBoostPads = [
-    { z: LOOP.z - 17.5, used: 0 },
-    { z: LOOP.z - 12.5, used: 0 }
+    { dz: -18.5, used: 0 },
+    { dz: -13, used: 0 }
   ];
+  const padPulse = [];
+  const padGeo = new THREE.PlaneGeometry(LOOP.W - 2.2, 3.2);
+  const padTint = makeRadialTexture('rgba(120,240,255,0.85)', 'rgba(0,180,255,0.4)', 'rgba(0,60,120,0)');
   for (const pad of loopBoostPads) {
-    const padMesh = new THREE.Mesh(new THREE.PlaneGeometry(LOOP.W - 2.2, 3),
-      new THREE.MeshBasicMaterial({ color: 0x00e5ff, toneMapped: false, transparent: true, opacity: 0.28 }));
-    padMesh.rotation.x = -Math.PI / 2;
-    padMesh.position.set(LOOP.x, 0.035, pad.z);
+    const padMesh = new THREE.Mesh(padGeo, new THREE.MeshBasicMaterial({
+      map: padTint, color: 0x00e5ff, toneMapped: false, transparent: true,
+      opacity: 0.5, depthWrite: false, side: THREE.DoubleSide
+    }));
+    padMesh.rotation.x = -Math.PI / 2 + Math.atan2(LOOP_DECK.h, LOOP_DECK.z1 - LOOP_DECK.z0);
+    padMesh.position.set(LOOP.x, deckH(pad.dz) + 0.05, LOOP.z + pad.dz);
+    padMesh.renderOrder = 2;
     scene.add(padMesh);
     pad.mesh = padMesh;
+    padPulse.push(pad);
   }
 
-  // piso interno do tubo ao longo de TODO o laco (o passeio usa); fora do
-  // passeio o chao ignora o tubo (da pra passar por BAIXO da estrutura)
+  /* --- CENARIO em volta do looping (estatico, custo zero em runtime):
+     faixa de pedestre na rua sul, lampadas nos cantos, muros baixos nos
+     quarteiroes vizinhos e lixeiras no beco — o landmark ganha contexto de
+     cidade em vez de flutuar num vazio. --- */
+  {
+    const crossMat = new THREE.MeshBasicMaterial({ color: 0xe8f2ff, transparent: true, opacity: 0.32, toneMapped: false, depthWrite: false });
+    for (let k = 0; k < 7; k++) {
+      const bar = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 8.6), crossMat);
+      bar.rotation.x = -Math.PI / 2;
+      bar.position.set(LOOP.x - 6.3 + k * 2.1, 0.03, LOOP.z - 32.5);
+      bar.renderOrder = 1;
+      scene.add(bar);
+    }
+    const sideMat = new THREE.MeshStandardMaterial({ color: 0x141c2a, roughness: 0.8, metalness: 0.2 });
+    for (const sx of [-1, 1]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.5, 26), sideMat);
+      wall.position.set(LOOP.x + sx * 7.4, 0.75, LOOP.z - 30);
+      wall.castShadow = true;
+      scene.add(wall);
+      const lampPost = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 5.6, 8), poleMat);
+      lampPost.position.set(LOOP.x + sx * 6.9, 2.8, LOOP.z - 27);
+      lampPost.castShadow = true;
+      scene.add(lampPost);
+      const lampHead = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 10), lampMat);
+      lampHead.position.set(LOOP.x + sx * 6.6, 5.7, LOOP.z - 27);
+      scene.add(lampHead);
+    }
+    const lidMat = new THREE.MeshStandardMaterial({ color: 0x27405a, roughness: 0.5, metalness: 0.7 });
+    const trashMat = new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.75, metalness: 0.4 });
+    for (let k = 0; k < 3; k++) {
+      const tx = LOOP.x + (k - 1) * 3.1 + 0.5, tz = LOOP.z - 34.5 + (k % 2) * 1.3;
+      const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.46, 1.15, 10), trashMat);
+      bin.position.set(tx, 0.58, tz);
+      bin.castShadow = true;
+      scene.add(bin);
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.1, 10), lidMat);
+      lid.position.set(tx, 1.18, tz);
+      scene.add(lid);
+    }
+    // luz orbitando o laco: a estrutura ganha brilho proprio, sempre de lado
+    const loopSpot = new THREE.PointLight(0x00e5ff, 90, 55, 2);
+    loopSpot.position.set(LOOP.x, LOOP.R + 6, LOOP.z);
+    scene.add(loopSpot);
+    if (!LOW_END) {
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 10), new THREE.MeshBasicMaterial({ color: 0xbff4ff, toneMapped: false }));
+      scene.add(halo);
+      loopSpot.userData.halo = halo;
+    }
+    loopSpot.userData.pulse = padPulse;
+    loopLight = loopSpot;
+  }
+
+  // piso do corredor do looping: a curva INTERNA do tubo onde ele encosta no
+  // chao (|dz| <= 5.5) + deck de ENTRADA (sul) + rampa de SAIDA (norte).
+  // Fora disso o chao ignora o tubo (da pra passar por BAIXO do arco)
   loopGround = (x, z) => {
     if (Math.abs(x - LOOP.x) > LOOP.W / 2) return -1;
     const dzz = z - LOOP.z;
-    const rr = Math.hypot(0, dzz);
-    if (rr > LOOP.R + 0.5) return -1; // fora da projecao do tubo
-    const hh = LOOP.R - Math.sqrt(Math.max(0, LOOP.R * LOOP.R - Math.min(dzz * dzz, LOOP.R * LOOP.R)));
-    return hh;
+    const onDeck = Math.abs(x - LOOP.x) <= (LOOP.W - 1) / 2;
+    let h = -1;
+    // tigela do fundo: a curva interna do tubo — continua o deck na boca
+    // (1.47 em |dz|=5.5) e mergulha ate 0 no centro. E o proprio trilho do passeio
+    if (Math.abs(dzz) <= 5.5) h = LOOP.R - Math.sqrt(LOOP.R * LOOP.R - dzz * dzz);
+    if (dzz >= LOOP_DECK.z0 && dzz <= LOOP_DECK.z1 && onDeck) {
+      h = Math.max(h, deckH(dzz));
+    }
+    if (dzz >= 5.5 && dzz <= 21 && onDeck) {
+      h = Math.max(h, deckH(-dzz)); // rampa de saida: espelho da entrada
+    }
+    return h;
   };
   // coletaveis DENTRO do laco: 8 orbes no mesmo caminho do passeio — valer
   // +200 cada obriga a entrar no tubo so pra faze-los
@@ -2696,6 +2836,35 @@ bindTouch('t-hb', 'hb');
 
 const visitedEl = document.getElementById('visited');
 const totalEl = document.getElementById('total');
+/* --- SETA GPS 3D (estilo NFS Most Wanted): holograma azul pequeno que
+   flutua alguns metros a frente do carro apontando o destino. Nada de
+   triangulo gigante colado na tela. --- */
+const wayArrowMesh = new THREE.Group();
+{
+  const shaft = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.1, 0.95),
+    new THREE.MeshBasicMaterial({ color: 0x35c4ff, transparent: true, opacity: 0.9, toneMapped: false, depthWrite: false })
+  );
+  shaft.position.z = 0.15;
+  const head = new THREE.Mesh(
+    new THREE.ConeGeometry(0.4, 0.85, 4),
+    new THREE.MeshBasicMaterial({ color: 0x35c4ff, transparent: true, opacity: 0.95, toneMapped: false, depthWrite: false })
+  );
+  head.rotation.x = Math.PI / 2; // cone aponta para +z (a frente da seta)
+  head.position.z = 0.9;
+  const base = new THREE.Mesh(
+    new THREE.RingGeometry(0.55, 0.8, 24),
+    new THREE.MeshBasicMaterial({ color: 0x35c4ff, transparent: true, opacity: 0.35, toneMapped: false, depthWrite: false, side: THREE.DoubleSide })
+  );
+  base.rotation.x = -Math.PI / 2;
+  base.position.y = -0.75;
+  wayArrowMesh.add(shaft, head, base);
+}
+wayArrowMesh.visible = false;
+wayArrowMesh.renderOrder = 5;
+scene.add(wayArrowMesh);
+let wayArrowBob = 0;
+
 const speedEl = document.getElementById('speed');
 const timerEl = document.getElementById('timer');
 const nitroEl = document.getElementById('nitro');
@@ -2836,7 +3005,7 @@ function drawMinimap() {
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LOW_END ? 0.6 : 0.78, 0.62, 0.72);
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LOW_END ? 0.6 : 0.72, 0.55, 0.78);
 composer.addPass(bloom);
 // vinheta + aberracao cromatica sutil + leve saturacao: acabamento synthwave
 // barato (1 quad, 5 samples) — em LOW_END vira so vinheta
@@ -2998,16 +3167,41 @@ function update(dt) {
      A velocidade critica fisica (v^2 < g*R no topo) e respeitada: sem ela,
      o passeio nem comeca. */
   if (loopGround) {
-    if (!state.looping && !state.airborne && state.y < 0.6
+    /* --- gatilho do passeio: deteccao de cruzamento da boca pelo MOVIMENTO
+       (posicao previa -> atual). Exige chegada pelo deck, de frente para o
+       tubo e com velocidade minima; os boost pads antes da boca cobrem o gap. --- */
+    const needV = Math.sqrt(2 * 26 * (2 * LOOP.R)) * 0.98; // energia do laco, folga de 2%: o NEON em velocidade maxima passa; os outros usam os pads
+    if (!state.looping && !state.airborne
       && Math.abs(car.position.x - LOOP.x) <= LOOP.W / 2
-      && car.position.z > LOOP.z - 17 && car.position.z < LOOP.z - 3
-      && Math.cos(state.heading) > 0.7) {
-      const needV = Math.sqrt(2 * 26 * (2 * LOOP.R)) * 1.06; // energia do laco + 6%
-      if (Math.abs(state.speed) >= needV) {
+      && preZ <= LOOP.z - 5.5 && car.position.z > LOOP.z - 5.5) {
+      const crossV = Math.abs(state.speed);
+      if (crossV >= needV && Math.cos(state.heading) > 0.5 && state.y < deckH(-5.5) + 1.2) {
         state.looping = true;
         state.loopA = 0; // ponto mais baixo do tubo
         loopLaps = 0;
         loopLapStart = performance.now();
+        state.moveH = 0;
+      } else if (crossV < needV) {
+        // chegou devagar demais: bate na subida interna e escorrega de volta
+        car.position.z = LOOP.z - 5.8;
+        state.speed *= -0.25;
+        shake = Math.min(1, shake + 0.3);
+        onCrash();
+      }
+    }
+    // pads de boost do deck: passou por cima -> turbine + brilho no pad
+    for (const pad of loopBoostPads) {
+      pad.used = Math.max(0, pad.used - dt);
+      if (state.looping) break;
+      const near = Math.abs(car.position.x - LOOP.x) < (LOOP.W - 1) / 2
+        && Math.abs(car.position.z - (LOOP.z + pad.dz)) < 1.9
+        && state.y > deckH(pad.dz) - 0.5 && state.y < deckH(pad.dz) + 2.2;
+      if (near && pad.used <= 0) {
+        // teto no boost: garante o laco sem transformar o pad em catapulta
+        state.speed = Math.min(state.speed + 26, needV * 1.15);
+        pad.used = 0.7;
+        pad.mesh.material.color.setHex(0xffffff);
+        tone(880, 0.09, { gain: 0.05 });
       }
     }
     if (state.looping) {
@@ -3045,13 +3239,25 @@ function update(dt) {
         tone(880, 0.16, { gain: 0.06, delay: 0.2 });
         state.looping = false;
         state.loopA = 0;
-        state.y = 0;
         state.airborne = false;
         state.vy = 0;
         state.moveH = 0;
+        state.heading = 0;
         state.slope = 0;
+        // solta JA NA RAMPA DE SAIDA (norte), na altura certa: o laco de
+        // brinquedo devolve o carro na pista, nao no meio do vazio
+        car.position.x = LOOP.x;
+        car.position.z = LOOP.z + 5.8;
+        state.y = deckH(-5.8);
+        car.position.y = state.y;
       } else {
         const ca = Math.cos(state.loopA), sa = Math.sin(state.loopA);
+        // o motor empurra de verdade dentro do tubo: se cair da curva minima,
+        // acelera um pouco (loop de brinquedo perdoa) — a checagem abaixo
+        // continua derrubando quem freia de fato
+        if (Math.abs(state.speed) < Math.sqrt(26 * LOOP.R) * 0.92) {
+          state.speed += 30 * dt;
+        }
         car.position.x = LOOP.x;
         car.position.z = LOOP.z + sa * LOOP.R;
         state.y = LOOP.R - ca * LOOP.R;
@@ -3430,8 +3636,31 @@ function present(dt) {
     const wdx = wayTarget.x - car.position.x, wdz = wayTarget.z - car.position.z;
     let rel = Math.atan2(wdx, wdz) - state.heading;
     rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-    wayArrow.style.transform = 'rotate(' + (rel * 180 / Math.PI).toFixed(1) + 'deg)';
     wayDist.textContent = Math.round(Math.hypot(wdx, wdz)) + ' m';
+    // holograma 3D: flutua ~6m a frente do carro, aponta o destino e respira
+    wayArrowBob += dt;
+    const bob = Math.sin(wayArrowBob * 3.2) * 0.16;
+    wayArrowMesh.position.set(
+      car.position.x + Math.sin(state.heading) * 6,
+      state.y + 2.05 + bob,
+      car.position.z + Math.cos(state.heading) * 6
+    );
+    wayArrowMesh.rotation.y = state.heading + rel;
+    wayArrowMesh.rotation.x = -state.slope * 0.5;
+    wayArrowMesh.scale.setScalar(0.92 + Math.sin(wayArrowBob * 5.1) * 0.08);
+    wayArrowMesh.visible = true;
+  } else if (wayArrowMesh.visible) {
+    wayArrowMesh.visible = false;
+  }
+  // cenario vivo do looping: luz respirando, halo orbitando, pads pulsando
+  if (loopLight) {
+    const lt = performance.now() / 1000;
+    loopLight.intensity = 90 + Math.sin(lt * 2.2) * 22;
+    const halo = loopLight.userData.halo;
+    if (halo) halo.position.set(LOOP.x + Math.cos(lt * 0.9) * 15, LOOP.R + 5 + Math.sin(lt * 1.3) * 4, LOOP.z + Math.sin(lt * 0.9) * 15);
+    for (const pad of loopLight.userData.pulse) {
+      pad.mesh.material.opacity = pad.used > 0 ? 0.95 : 0.4 + Math.sin(lt * 5 + pad.dz) * 0.16;
+    }
   }
   if (state.started && !state.finished) {
     const elapsed = (performance.now() - state.startTime) / 1000;
@@ -3591,6 +3820,10 @@ if (params.has('debug')) {
       : null,
     blinkerMat,
     loopCoins,
+    loopBoostPads: () => loopBoostPads,
+    wayArrowMesh,
+    pads,
+    resetCrash: () => { crashCd = 0; },
     step: (n = 1) => { for (let i = 0; i < n; i++) { update(FIXED_DT); present(FIXED_DT); } },
   };
 }

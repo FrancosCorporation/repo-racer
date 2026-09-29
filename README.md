@@ -42,7 +42,9 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
 ## Recursos
 
 - **Cidade neon 3D** com prédios de janelas iluminadas, postes, estrelas,
-  névoa e **bloom** (pós-processamento) com tone mapping cinematográfico
+  névoa e **bloom** (pós-processamento) com tone mapping cinematográfico —
+  agora com o tubo do looping brilhando, faixa de pedestre e postes no
+  entorno do laço e HUD mais polida (combo com "pop", minimap emoldurado)
 - **Garagem com 3 carros** — NEON (equilibrado), PHANTOM (veloz, traseira
   solta) e TANK (firme) — cada um com cor e dirigibilidade próprias
 - **Nitro (Shift)** com barra de recarga, chamas no escapamento e FOV dinâmico
@@ -57,8 +59,10 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
   PERDIDO!") e o recorde de pontos fica salvo no navegador
 - **Coletáveis de N2O** espalhados pelas avenidas: reenchem o nitro na hora e
   somam **+400** pontos (renascem em 40 s)
-- **Bússola do próximo repositório**: seta girando, nome e distância até a
-  praça não visitada mais próxima
+- **Bússola holográfica 3D** (estilo NFS Most Wanted): um holograma azul
+  pequeno flutua alguns metros à frente do carro apontando o destino, com
+  pulso e balanço suaves — o painel mostra nome e distância até a praça não
+  visitada mais próxima
 - **Chefão final: SEGV** — complete os 13 repos e libere o duelo no botão
   "ENFRENTAR O CHEFÃO": telegrafa, carga e janela de vulnerabilidade, 3
   corações contra 100 de vida em 90 s (atalho: `?boss=1`)
@@ -75,12 +79,16 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
   só dispara no sentido de subida — o paredão segura o carro como um muro,
   inclusive de marcha à ré e **chegando pelo ar**; atacar pela lateral ou por
   trás **não atravessa** a rampa, o carro bate e para na face)
-- **Looping estilo Hot Wheels** (perto da praça `36, 36`): entre com velocidade
-  (~91 km/h) e o tubo circular te carrega de cabeça para baixo — cada volta
-  completa vale **+800**. Quem vai devagar demais despenca no ponto crítico
-  (física real de laço: `v² ≥ 2g·2R`). **8 orbes** brilhantes ao longo do laço
-  valem **+200 cada**, e o **melhor tempo de volta** fica salvo no navegador —
-  bater o recorde dispara o toast "NOVO RECORDE DE VOLTA!"
+- **Looping estilo Hot Wheels** (perto da praça `36, 36`): pista de ENTRADA
+  com guard-rails e **boost pads** que garantem os ~119 km/h do laço (o NEON
+  chega sozinho em velocidade máxima; os outros carros usam os pads), tubo
+  com casca sólida — quem vai devagar **quica na boca e volta**, ninguém
+  atravessa a estrutura — e boca de SAÍDA ao norte que te devolve na rua já
+  descendo a rampa. Cada volta completa vale **+800**. **8 orbes** ao longo
+  do laço valem **+200 cada**, e o **melhor tempo de volta** fica salvo no
+  navegador — bater o recorde dispara o toast "NOVO RECORDE DE VOLTA!". O
+  cenário em volta ganhou vida: muros, lixeiras, postes acesos e uma luz
+  ciano que orbita a estrutura
 - **Orla sólida**: os prédios do skyline no fim das avenidas agora têm colisão —
   não dá mais para entrar no meio deles
 - **Som procedural** (WebAudio, sem arquivos): motor que responde à
@@ -213,7 +221,8 @@ https://francoscorporation.github.io/repo-racer/
   `phaseState`, `phaseStatus`, `enemies`, `startBoss`, `getBoss`, `damageBoss`,
   `hurtPlayer`, `bossEnd`, `resetScore`, `resetProgress`, `keys`, `traffic`,
   `buildings`, `sparksCount`, `bumperDent`, `puddles`, `windowGlow`,
-  `bossBlob`, `blinkerMat`, `loopCoins`)
+  `bossBlob`, `blinkerMat`, `loopCoins`, `loopBoostPads`, `wayArrowMesh`,
+  `pads`, `resetCrash`)
 - **GitHub Pages** — hospedagem estática
 
 ## Rodar localmente
