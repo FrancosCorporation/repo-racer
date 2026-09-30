@@ -174,6 +174,7 @@
     <div class="row"><span id="timer">00:00</span><span id="sound">som: on</span></div>
     <div class="score-row"><span>PONTOS <span id="score">0</span></span><span id="combo"></span></div>
     <div class="row"><span>MELHOR VOLTA</span><span id="loop-best">--</span></div>
+    <div class="row"><span>VOLTAS NA SESSÃO</span><span id="loop-laps">0</span></div>
     <div id="nitro-wrap"><div id="nitro"></div></div>
   </div>
   <div id="way" class="box">
@@ -222,7 +223,7 @@
   <div class="logo">REPO RACER</div>
   <div class="tag">Uma cidade neon para explorar os repositorios da FrancosCorporation.
     Cada praca iluminada e um projeto: pare em cima, leia o banner e aperte <b>E</b> para abrir no GitHub.<br>
-    Os <b>circulos de fase</b> espalhados pela cidade liberam desafios: aquecimento, circuito de portais, zona de drift, caca e o chefao.
+    Os <b>circulos de fase</b> espalhados pela cidade liberam desafios: aquecimento, circuito de portais, zona de drift, caça, o laco infinito e o chefao.
     Cada fase libera a proxima conforme a sua pontuacao. Passe em cima e aperte <b>E</b> para aceitar.</div>
   <div id="garage"></div>
   <div class="cta" id="go">DIRIGIR</div>
@@ -882,6 +883,17 @@ let loopGateMat = null; // portal sul do laço: vira "semáforo" de velocidade
 let loopHintCd = 0; // cooldown do aviso de velocidade minima
 let loopLapT = 0; // duracao da ultima volta fechada (s)
 let loopBestTime = 0; // melhor volta da ultima batida de recorde (para o toast)
+/* --- backlog #4/#5: placar de sessao, ghost e volta encadeada --- */
+let loopLapsTotal = 0; // voltas completas na sessao (o loopLaps zera por entrada)
+let loopStreak = 0; // corrente de voltas seguidas dentro da janela de 45s
+let loopLastExitT = -1; // timestamp da ultima saida (janela da corrente)
+let loopGhostBest = null; // gravacao da melhor volta (amostras t,x,y,z,pitch)
+let loopGhostRec = null; // gravacao em andamento
+let loopGhostIdx = 0; // ponteiro de playback do ghost
+let loopGhostMesh = null; // malha translucida do fantasma
+/* roll da camera no laco: alvo em y/z do vetor "cima" (eased, sem estalo) */
+let camUpY = 1, camUpZ = 0;
+const loopLapsEl = document.getElementById('loop-laps');
 const loopCoins = [];
 const LOOP_BEST_KEY = 'francos-repo-racer-loopbest';
 const loopBestEl = document.getElementById('loop-best');
@@ -892,6 +904,30 @@ function updateLoopBestHud() {
   loopBestEl.textContent = b > 0 ? b.toFixed(2) + 's' : '--';
 }
 updateLoopBestHud(); // mostra o recorde salvo ja na abertura
+/* Ghost da melhor volta (#4): um clone translucido do carro que refez o
+   caminho gravado. Criado sob demanda (a primeira so gravar uma volta). */
+function ensureLoopGhost() {
+  if (loopGhostMesh) return loopGhostMesh;
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x7ef0ff, transparent: true, opacity: 0.28, depthWrite: false,
+    toneMapped: false, wireframe: false
+  });
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new RoundedBoxGeometry(1.9, 0.5, 3.9, 3, 0.14), mat);
+  box.position.y = 0.62;
+  g.add(box);
+  const cab = new THREE.Mesh(new RoundedBoxGeometry(1.5, 0.5, 1.95, 3, 0.16), mat);
+  cab.position.set(0, 1.1, -0.18);
+  g.add(cab);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(1.96, 1.66, 3.96),
+    new THREE.MeshBasicMaterial({ color: 0x7ef0ff, transparent: true, opacity: 0.1, depthWrite: false, toneMapped: false, wireframe: true }));
+  edge.position.y = 0.8;
+  g.add(edge);
+  g.visible = false;
+  scene.add(g);
+  loopGhostMesh = g;
+  return g;
+}
 /* --- LOOPING estilo Hot Wheels ---
    Pista de ENTRADA com guard-rails e boost pads que garantem a velocidade
    minima, tubo circular com CASCA SOLIDA (quem vai devagar bate e e jogado
@@ -901,13 +937,37 @@ const LOOP = { x: 36, z: 36, R: 11, W: 9 };
 // deck de entrada e altura (escopo do modulo: a fisica do update usa deckH).
 // z0/z1 sao RELATIVOS a LOOP.z: deckH(dz) espera dz = z - LOOP.z
 const LOOP_DECK = { z0: -21, z1: -5.5, h: 1.47 };
-const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_DECK.z0));
 /* Boca do tubo (a "janela" por onde a pista passa) e o angulo dela no laco.
    O passeio comeca e termina EXATAMENTE aqui: antes ele comecava em a=0 (ponto
    mais baixo) e o carro dava um teleporte de ~6u na entrada e outro na saida. */
 const LOOP_MOUTH = LOOP_DECK.z1 * -1; // 5.5
 const LOOP_A_MOUTH = Math.asin(LOOP_MOUTH / LOOP.R); // ~0.524 rad (30 graus)
 const LOOP_A_EXIT = Math.PI * 2 + LOOP_A_MOUTH; // volta completa + boca norte
+/* --- deck com TRANSICAO TANGENTE (backlog #1) ---
+   A reta pura chegava na boca com +5,4° enquanto a tigela do tubo continua com
+   -30°: uma quina de 35° que o blend do chassi so disfarcava. Agora os ultimos
+   2,5m viram uma Hermite cubica com slope casada nos dois lados — a pista chega
+   na boca exatamente com a tangente do tubo (C¹): sem cotovelada nenhuma. */
+const deckLin = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_DECK.z0));
+const DECK_T0 = -8;                    // onde a reta vira curva (2,5m de transicao)
+const DECK_M = LOOP_DECK.h / (LOOP_DECK.z1 - LOOP_DECK.z0); // +0,0948 slope da reta
+const DECK_M1 = -Math.tan(LOOP_A_MOUTH);                    // -0,577 = tangente da tigela
+const deckH = (dz) => {
+  if (dz <= DECK_T0) return deckLin(dz);
+  const H = LOOP_DECK.z1 - DECK_T0; // 2.5
+  const u = clamp((dz - DECK_T0) / H, 0, 1);
+  const u2 = u * u, u3 = u2 * u;
+  return (2 * u3 - 3 * u2 + 1) * deckLin(DECK_T0) + (u3 - 2 * u2 + u) * H * DECK_M
+    + (-2 * u3 + 3 * u2) * LOOP_DECK.h + (u3 - u2) * H * DECK_M1;
+};
+// slope local da pista (setas/faixas/rails acompanham a curva, nao a reta)
+const deckSlope = (dz) => {
+  if (dz <= DECK_T0) return DECK_M;
+  const H = LOOP_DECK.z1 - DECK_T0, u = clamp((dz - DECK_T0) / H, 0, 1);
+  const u2 = u * u;
+  return ((6 * u2 - 6 * u) * deckLin(DECK_T0) + (3 * u2 - 4 * u + 1) * H * DECK_M
+    + (-6 * u2 + 6 * u) * LOOP_DECK.h + (3 * u2 - 2 * u) * H * DECK_M1) / H;
+};
 // velocidade minima fisica do laco (energia para chegar ao topo, folga de 2%)
 const LOOP_NEED_V = Math.sqrt(2 * 26 * (2 * LOOP.R)) * 0.98;
 // normaliza um angulo para [-pi, pi] (evita "piro" no blend do chassi)
@@ -992,19 +1052,51 @@ const wrapPi = (a) => a - Math.round(a / (Math.PI * 2)) * Math.PI * 2;
     scene.add(arr);
   }
 
+  /* Perfis do deck: o MESH precisa seguir o MESMO deckH da fisica (com a
+     transicao tangente), senao o carro "voa" perto da boca. A forma e um
+     perfil fechado: base reta no chao + topo amostrado de deckH(dz). */
+  const loopDeckShape = () => {
+    const L = LOOP_DECK.z1 - LOOP_DECK.z0; // 15.5
+    const base = L / 2 + 5.5;              // 13.25 (dz = localX - base)
+    const sh = new THREE.Shape();
+    sh.moveTo(-L / 2, 0);
+    sh.lineTo(L / 2, 0);
+    sh.lineTo(L / 2, deckH(-5.5)); // boca = 1.47
+    const N = 48;
+    for (let i = N - 1; i >= 0; i--) {
+      const lx = -L / 2 + (L * i) / N;
+      sh.lineTo(lx, deckH(lx - base));
+    }
+    sh.closePath();
+    return sh;
+  };
+  // guard-rails segmentados: acompanham a curva do deck (uma pecã reta
+  // sumiria na subida e sairia voando na transicao)
+  const addLoopDeckRails = (dir) => { // +1 = deck sul (entrada), -1 = norte (saida)
+    const L = LOOP_DECK.z1 - LOOP_DECK.z0;
+    const base = L / 2 + 5.5;
+    const SEG = 16;
+    for (const sx of [-1, 1]) {
+      for (let i = 0; i < SEG; i++) {
+        const l0 = -L / 2 + (L * i) / SEG, l1 = -L / 2 + (L * (i + 1)) / SEG;
+        const zm = (l0 + l1) / 2;
+        const h0 = deckH(l0 - base), h1 = deckH(l1 - base);
+        const seg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, Math.hypot(l1 - l0, h1 - h0)), railMat);
+        seg.position.set(LOOP.x + sx * ((LOOP.W - 1) / 2 + 0.08), (h0 + h1) / 2 + 0.22, LOOP.z + dir * (zm - base));
+        seg.rotation.x = -dir * Math.atan2(h1 - h0, l1 - l0);
+        seg.castShadow = true;
+        scene.add(seg);
+      }
+    }
+  };
+
   /* --- PISTA DE ENTRADA estilo Hot Wheels (ao sul, sobe ate a boca) ---
      O deck sobe ate 1.47 e entrega o carro DENTRO do tubo (na curva interna
      do laco); dai ele desce a curva ate o ponto mais baixo e entra no passeio
      com velocidade. Sem degraus, sem teleporte: pista continua de verdade. */
   {
     const rampLen = LOOP_DECK.z1 - LOOP_DECK.z0; // 15.5
-    const rampH = LOOP_DECK.h;                   // 1.47
-    const deckShape = new THREE.Shape();
-    deckShape.moveTo(-rampLen / 2, 0);
-    deckShape.lineTo(rampLen / 2, 0);
-    deckShape.lineTo(rampLen / 2, rampH);
-    deckShape.closePath();
-    const deckGeo = new THREE.ExtrudeGeometry(deckShape, { depth: LOOP.W - 1, bevelEnabled: false });
+    const deckGeo = new THREE.ExtrudeGeometry(loopDeckShape(), { depth: LOOP.W - 1, bevelEnabled: false });
     deckGeo.translate(0, 0, -(LOOP.W - 1) / 2);
     const deckMat = new THREE.MeshStandardMaterial({ color: 0x151d2b, roughness: 0.42, metalness: 0.72, envMapIntensity: 1.0 });
     const deck = new THREE.Mesh(deckGeo, deckMat);
@@ -1013,15 +1105,7 @@ const wrapPi = (a) => a - Math.round(a / (Math.PI * 2)) * Math.PI * 2;
     deck.castShadow = true;
     deck.receiveShadow = true;
     scene.add(deck);
-    // guard-rails laranja seguindo a subida (estilo pista de brinquedo)
-    const slope = Math.atan2(rampH, rampLen);
-    for (const sx of [-1, 1]) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, rampLen), railMat);
-      rail.position.set(LOOP.x + sx * ((LOOP.W - 1) / 2 + 0.08), rampH / 2 + 0.2, LOOP.z - 13.25);
-      rail.rotation.x = -slope; // acompanha a inclinacao do deck
-      rail.castShadow = true;
-      scene.add(rail);
-    }
+    addLoopDeckRails(+1); // guard-rails laranja seguindo a CURVA da subida
     // faixas amarelas do deck (seguem a altura da rampa)
     for (let k = 0; k < 4; k++) {
       const sz = LOOP.z - 19.5 - k * 3.7;
@@ -1032,16 +1116,12 @@ const wrapPi = (a) => a - Math.round(a / (Math.PI * 2)) * Math.PI * 2;
   }
 
   /* --- PISTA DE SAIDA (norte): espelho da entrada — quem completa o laco no
-     ponto mais baixo continua para o norte e desce aqui de volta a rua --- */
+     ponto mais baixo continua para o norte e desce aqui de volta a rua ---
+     Mesma curva (deckH espelhada): a saida tambem sai da boca na tangente
+     (+30°), sobe um leve lombada e mergulha na rua sem quina. */
   {
     const rampLen = LOOP_DECK.z1 - LOOP_DECK.z0;
-    const rampH = LOOP_DECK.h;
-    const deckShape = new THREE.Shape();
-    deckShape.moveTo(-rampLen / 2, 0);
-    deckShape.lineTo(rampLen / 2, 0);
-    deckShape.lineTo(rampLen / 2, rampH);
-    deckShape.closePath();
-    const deckGeo = new THREE.ExtrudeGeometry(deckShape, { depth: LOOP.W - 1, bevelEnabled: false });
+    const deckGeo = new THREE.ExtrudeGeometry(loopDeckShape(), { depth: LOOP.W - 1, bevelEnabled: false });
     deckGeo.translate(0, 0, -(LOOP.W - 1) / 2);
     const deckMat = new THREE.MeshStandardMaterial({ color: 0x151d2b, roughness: 0.42, metalness: 0.72, envMapIntensity: 1.0 });
     const deck = new THREE.Mesh(deckGeo, deckMat);
@@ -1050,14 +1130,7 @@ const wrapPi = (a) => a - Math.round(a / (Math.PI * 2)) * Math.PI * 2;
     deck.castShadow = true;
     deck.receiveShadow = true;
     scene.add(deck);
-    const slope = Math.atan2(rampH, rampLen);
-    for (const sx of [-1, 1]) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, rampLen), railMat);
-      rail.position.set(LOOP.x + sx * ((LOOP.W - 1) / 2 + 0.08), rampH / 2 + 0.2, LOOP.z + 13.25);
-      rail.rotation.x = slope; // acompanha a descida
-      rail.castShadow = true;
-      scene.add(rail);
-    }
+    addLoopDeckRails(-1);
     for (let k = 0; k < 4; k++) {
       const sz = LOOP.z + 19.5 + k * 3.7;
       const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 1.4), arrowMat);
@@ -1422,6 +1495,11 @@ const PHASES = [
     id: 'p3', name: 'ZONA DE DRIFT', type: 'ring', x: 120, z: -120, radius: 24, color: 0xff2d95,
     unlock: 4000, time: 60, goal: 1500, reward: 2500,
     desc: 'Dentro do circulo o chao solta de vez: some 1500 pontos de combo.'
+  },
+  {
+    id: 'p6', name: 'LACO INFINITO', type: 'loop', x: 36, z: 4, radius: 8, color: 0xffb300,
+    unlock: 6000, time: 60, goal: 8, reward: 2200,
+    desc: 'Reaproveita as orbes do looping: entre pela ENTRADA e traga as 8 orbes antes do tempo (no dificil sao 10 — precisa de duas voltas).'
   },
   {
     id: 'p4', name: 'CACADA', type: 'chase', x: 0, z: 180, radius: 12, color: 0xff7043,
@@ -1904,6 +1982,10 @@ function startPhase(p, diff) {
   challengeEl.classList.add('show');
   if (def.type === 'gates') buildGates(def);
   if (def.type === 'chase') spawnEnemies(def);
+  // #6 desafio do laco: zera as orbes — o desafio comeca com o tubo cheio
+  if (def.type === 'loop') {
+    for (const c of loopCoins) { c.taken = false; c.respawn = 0; c.mesh.visible = true; }
+  }
   toast('FASE: ' + def.name + ' — ' + D.key, '#ff2d95');
   tone(520, 0.18, { gain: 0.07 });
   tone(780, 0.22, { gain: 0.07, delay: 0.14 });
@@ -2019,6 +2101,14 @@ function updatePhases(dt) {
     if (phaseState.lives <= 0) endPhase(false, 'Os rivais acabaram com voce. Tente de novo!');
     else if (enemies.length && enemies.every((e) => !e.alive)) endPhase(true, 'Voce destruiu os ' + enemies.length + ' rivais!');
     else if (phaseState.t <= 0) endPhase(true, 'Voce aguentou ' + def.time + 's de caca.');
+  } else if (def.type === 'loop') {
+    // #6 progresso = orbes coletadas dentro do laco (hook no bloco de coleta)
+    const goalNow = Math.round((def.goal || 8) * (DIFFS[phaseState.diff] || DIFFS[1]).goalMul);
+    if (phaseState.progress >= goalNow) {
+      endPhase(true, 'As ' + goalNow + ' orbes do laco na mochila — volta linda!');
+    } else if (phaseState.t <= 0) {
+      endPhase(false, 'Faltaram ' + (goalNow - phaseState.progress) + ' orbes do laco.');
+    }
   } else if (def.type === 'boss') {
     // a luta roda em updateBoss; se o SEGV for vencido fora da fase (?boss=1),
     // a fase ficaria presa ativa para sempre — aqui ela tambem termina
@@ -2909,6 +2999,13 @@ function startGame() {
   applyCarChoice();
   resetBumper(); // nova corrida: carro novinho (sem amassado de sessao passada)
   loopBestShown = false;
+  // sessao nova: placar de voltas, corrente e ghost recomecam do zero
+  loopLapsTotal = 0;
+  loopStreak = 0;
+  loopLastExitT = -1;
+  loopGhostBest = null;
+  loopGhostRec = null;
+  if (loopLapsEl) loopLapsEl.textContent = '0';
   state.started = true;
   state.startTime = performance.now();
   initAudio();
@@ -3245,6 +3342,7 @@ function bodyPitch(target, dt) {
 // rede de seguranca: nada (fase, duelo, teleporte de teste) deve comecar com o
 // carro "grudado" no passeio do laco
 function cancelLoopRide() {
+  if (loopGhostMesh) loopGhostMesh.visible = false;
   if (!state.looping) return;
   state.looping = false;
   state.loopA = 0;
@@ -3270,7 +3368,9 @@ function update(dt) {
   if (active) {
     if (keys.up || pad.up) state.speed += 28 * stats.accel * dt;
     else if (keys.down || pad.down) state.speed -= BRAKE * dt;
-    else state.speed *= Math.exp(-FRICTION * dt);
+    // #2 dentro do laco nao ha friccao de rua: quem solta o acelerador COZA
+    // (a gravidade manda), quem freia de verdade ainda consegue cair
+    else if (!state.looping) state.speed *= Math.exp(-FRICTION * dt);
     if (hbNow && !state.airborne && Math.abs(state.speed) > 0.5) state.speed *= Math.exp(-2.4 * dt);
 
     state.boosting = (keys.nitro || pad.nitro) && state.nitro > 0.02 && state.speed > 2;
@@ -3283,9 +3383,11 @@ function update(dt) {
     state.padBoost = Math.max(0, state.padBoost - dt);
     // o boost dos pads do laco tambem levanta o teto de velocidade: sem isso o
     // clamp do frame seguinte engole o ganho e o TANK nunca alcanca o laco
-    const maxSpeed = (state.boosting || state.padBoost > 0.001) ? stats.max * 1.45 : stats.max;
+    // no laco quem manda e a energia (gravidade); o teto de rua fica de fora
+    const maxSpeed = state.looping ? LOOP_NEED_V * 1.4
+      : ((state.boosting || state.padBoost > 0.001) ? stats.max * 1.45 : stats.max);
     state.speed = clamp(state.speed, MAX_REVERSE, maxSpeed);
-    if (!state.boosting && state.speed > stats.max) state.speed -= 18 * dt;
+    if (!state.boosting && !state.looping && state.speed > stats.max) state.speed -= 18 * dt;
 
     const steerInput = ((keys.left || pad.left) ? 1 : 0) - ((keys.right || pad.right) ? 1 : 0);
     const speedFactor = Math.min(1, Math.abs(state.speed) / 12);
@@ -3346,14 +3448,27 @@ function update(dt) {
       const crossV = Math.abs(state.speed);
       if (crossV >= LOOP_NEED_V && Math.cos(state.heading) > 0.5 && state.y < deckH(-LOOP_MOUTH) + 1.2) {
         state.looping = true;
-        // angulo inicial tirado da posicao REAL do carro (boca sul): continuo
-        state.loopA = Math.asin(clamp((car.position.z - LOOP.z) / LOOP.R, -1, 1));
+        // angulo inicial da posicao ANTES do passo (preZ): o passeio avanca um
+        // passo angular A PARTIR dali — continuo com a trajetoria. (Usar a
+        // posicao pos-integracao duplicava o passo no quadro do gatilho.)
+        state.loopA = Math.asin(clamp((preZ - LOOP.z) / LOOP.R, -1, 1));
         state.loopX = car.position.x; // mantem o deslocamento lateral de entrada
         state.loopPitchFrom = carBody.rotation.x; // suaviza a quina deck -> tubo
         state.loopPitchBlend = 1;
         loopLaps = 0;
         loopLapStart = performance.now();
         state.moveH = 0;
+        /* #5 volta encadeada: re-entrou <45s depois da saida -> o boost do
+           pad e concedido na mao (e a corrente soma pontos la na saida) */
+        if (loopLastExitT > 0 && performance.now() - loopLastExitT < 45000) {
+          state.padBoost = Math.max(state.padBoost, 1.2);
+          state.speed = Math.max(state.speed, LOOP_NEED_V * 1.1);
+          if (loopStreak >= 1) toast('CORRENTE x' + (loopStreak + 1) + ' — BOOST MANTIDO!', '#7ef0ff');
+        }
+        /* #4 comeca a gravar esta volta (amostras pro ghost da melhor) */
+        loopGhostRec = [];
+        loopGhostIdx = 0;
+        if (loopGhostMesh) loopGhostMesh.visible = false;
       } else if (crossV < LOOP_NEED_V) {
         // chegou devagar demais: bate na subida interna e escorrega de volta
         car.position.z = LOOP.z - LOOP_MOUTH - 0.3;
@@ -3398,6 +3513,8 @@ function update(dt) {
           c.respawn = 40; // renascem como os coletaveis de N2O
           c.mesh.visible = false;
           scoreState.total += 200;
+          // #6 a fase LACO INFINITO conta cada orbe como 1 de progresso
+          if (phaseState.active && phaseState.def.type === 'loop') phaseState.progress += 1;
           pickupBlip();
           toast('ORBE DO LACO  +200', '#ffd54f');
         }
@@ -3415,11 +3532,28 @@ function update(dt) {
             loopBestFlash = 1.2;
             loopBestTime = lapT;
           }
+          // #4 ghost: guarda a gravacao se for a melhor da SESSAO (o tempo
+          // recorde continua no localStorage, o caminho fica so na memoria)
+          if (loopGhostRec && loopGhostRec.length > 8 && (!loopGhostBest || lapT < loopGhostBest.t)) {
+            loopGhostBest = { t: lapT, s: loopGhostRec };
+            ensureLoopGhost(); // o fantasma passa a existir na primeira volta gravada
+          }
+          loopGhostRec = null;
           loopLapStart = -1;
         }
         loopLaps++;
-        scoreState.total += 800;
-        toast('LOOPING!  +800' + (loopLapT > 0 ? ' · volta em ' + loopLapT.toFixed(2) + 's' : ''), '#ffb300');
+        loopLapsTotal++;
+        if (loopLapsEl) loopLapsEl.textContent = String(loopLapsTotal);
+        if (loopGhostMesh) loopGhostMesh.visible = false;
+        /* #5 corrente de voltas: saida <45s da anterior encadeia e vale
+           pontos extras (800 + 300 por volta na corrente, ate +1200) */
+        const nowLap = performance.now();
+        loopStreak = (loopLastExitT > 0 && nowLap - loopLastExitT < 45000) ? loopStreak + 1 : 1;
+        loopLastExitT = nowLap;
+        const lapScore = 800 + Math.min(4, loopStreak - 1) * 300;
+        scoreState.total += lapScore;
+        toast('LOOPING!  +' + lapScore + (loopLapT > 0 ? ' · volta em ' + loopLapT.toFixed(2) + 's' : '')
+          + (loopStreak > 1 ? ' · CORRENTE x' + loopStreak : ''), '#ffb300');
         tone(520, 0.1, { gain: 0.06 });
         tone(660, 0.12, { gain: 0.06, delay: 0.09 });
         tone(880, 0.16, { gain: 0.06, delay: 0.2 });
@@ -3440,9 +3574,13 @@ function update(dt) {
         car.position.y = state.y;
       } else {
         const ca = Math.cos(state.loopA), sa = Math.sin(state.loopA);
-        // o motor empurra de verdade dentro do tubo: se cair da curva minima,
-        // acelera um pouco (loop de brinquedo perdoa) — a checagem abaixo
-        // continua derrubando quem freia de fato
+        /* #2 ENERGIA REAL: a gravidade freia na subida e acelera na descida
+           (dv = -g·sen(a)·da, com da = v/R·dt — a forma de energia, que cai a
+           zero na volta completa). O teto de g efetivo (20) mantem a fisica
+           plausivel E fecha a volta com a velocidade de boca; o piso de
+           seguranca do brinquedo so entra se faltar — e quem freia de verdade
+           ainda despenca (checagem abaixo). */
+        state.speed -= 20 * sa * (state.speed / LOOP.R) * dt;
         if (Math.abs(state.speed) < Math.sqrt(26 * LOOP.R) * 0.92) {
           state.speed += 30 * dt;
         }
@@ -3454,6 +3592,24 @@ function update(dt) {
         // da entrada pra nao "cotovelar" o chassi no primeiro frame
         bodyPitch(wrapPi(-state.loopA), dt);
         carBody.rotation.z = 0;
+        /* #4 ghost: grava esta volta e, se ja existe uma melhor, refez ela
+           em paralelo (playback indexado pelo tempo real da volta) */
+        if (loopGhostRec && loopLapStart >= 0) {
+          loopGhostRec.push([(performance.now() - loopLapStart) / 1000, car.position.x, state.y, car.position.z, carBody.rotation.x]);
+        }
+        if (loopGhostBest && loopGhostRec && loopGhostMesh && loopLapStart >= 0) {
+          const gt = (performance.now() - loopLapStart) / 1000;
+          const smp = loopGhostBest.s;
+          while (loopGhostIdx + 1 < smp.length && smp[loopGhostIdx + 1][0] <= gt) loopGhostIdx++;
+          if (gt <= smp[smp.length - 1][0]) {
+            const s = smp[loopGhostIdx];
+            loopGhostMesh.visible = true;
+            loopGhostMesh.position.set(s[1], s[2], s[3]);
+            loopGhostMesh.rotation.set(s[4], 0, 0);
+          } else {
+            loopGhostMesh.visible = false; // ghost ja cruzou a linha
+          }
+        }
         if (Math.abs(state.speed) < Math.sqrt(26 * LOOP.R) * 0.82) {
           // perdeu a forca centripeta antes de fechar: despenca
           state.loopPitchFrom = wrapPi(-state.loopA);
@@ -3462,6 +3618,7 @@ function update(dt) {
           state.loopA = 0;
           state.airborne = true;
           state.vy = 0;
+          if (loopGhostMesh) loopGhostMesh.visible = false;
           onCrash();
           toast('VELOCIDADE BAIXA — CAIU!', '#ff5470');
         }
@@ -3540,6 +3697,13 @@ function update(dt) {
         else v *= approach;
       }
       state.vy = clamp(v, -30, 10);
+      state.y = gh;
+    } else if (state.y - gh <= Math.max(0.05, spd * dt * 1.15)) {
+      // #1 descida continua (ex.: transicao tangente do deck rumo a boca):
+      // cola no chao em vez de decolar. O limite cresce com a velocidade
+      // (cobre o passo da descida); cair de uma borda de verdade, com queda
+      // maior que o passo, continua virando voo no ramo abaixo.
+      state.vy = 0;
       state.y = gh;
     } else if (state.y > gh + 0.05) {
       state.airborne = true;
@@ -3823,7 +3987,18 @@ function update(dt) {
 
 function present(dt) {
   pollGamepad();
-  const targetFov = 62 + clamp(Math.abs(state.speed) * 0.4, 0, state.boosting ? 20 : 14);
+  /* #3 CAMERA DO LACO: dentro do tubo o "cima" da camera acompanha a tangente
+     (roll = up do carro, (0, cos a, -sin a)) — a inversao de cabeca pra baixo
+     aparece na tela, nao so no chassi. O alvo e eased em y/z (sem estalo na
+     entrada/saida) e o FOV ganha +10 de velocidade durante o passeio. */
+  const tUpY = state.looping ? Math.cos(state.loopA) : 1;
+  const tUpZ = state.looping ? -Math.sin(state.loopA) : 0;
+  const kUp = Math.min(1, dt * 5);
+  camUpY += (tUpY - camUpY) * kUp;
+  camUpZ += (tUpZ - camUpZ) * kUp;
+  const upL = Math.hypot(camUpY, camUpZ) || 1;
+  camera.up.set(0, camUpY / upL, camUpZ / upL);
+  const targetFov = 62 + clamp(Math.abs(state.speed) * 0.4, 0, state.boosting ? 20 : 14) + (state.looping ? 10 : 0);
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 3);
   camera.updateProjectionMatrix();
 
@@ -3926,6 +4101,12 @@ function present(dt) {
       chProgEl.textContent = (enemies.length - alive) + ' / ' + enemies.length + ' destruidos';
       chBarEl.style.width = clamp(1 - phaseState.t / (def.time * (DIFFS[phaseState.diff] || DIFFS[1]).timeMul), 0, 1) * 100 + '%';
       chLivesEl.textContent = '♥'.repeat(phaseState.lives) + '♡'.repeat(Math.max(0, 8 - phaseState.lives));
+    } else if (def.type === 'loop') {
+      const goalNow = Math.round((def.goal || 8) * (DIFFS[phaseState.diff] || DIFFS[1]).goalMul);
+      chGoalEl.textContent = 'Entre pela ENTRADA e traga as orbes do laco (' + DIFFS[phaseState.diff].key + ')';
+      chProgEl.textContent = phaseState.progress + ' / ' + goalNow + ' orbes';
+      chBarEl.style.width = clamp(phaseState.progress / goalNow, 0, 1) * 100 + '%';
+      chLivesEl.textContent = state.looping ? 'DENTRO DO LACO!' : 'chegue a ' + Math.round(LOOP_NEED_V * 4) + ' km/h';
     }
   }
   frameCount++;
@@ -4013,7 +4194,12 @@ if (params.has('debug')) {
     loopState: () => ({
       looping: state.looping, a: state.loopA, laps: loopLaps, lapT: loopLapT,
       x: car.position.x, z: car.position.z, y: state.y, padBoost: state.padBoost,
-      gate: loopGateMat ? '#' + loopGateMat.color.getHexString() : null
+      gate: loopGateMat ? '#' + loopGateMat.color.getHexString() : null,
+      lapsTotal: loopLapsTotal, streak: loopStreak,
+      ghost: !!(loopGhostBest && loopGhostBest.s), ghostRec: !!loopGhostRec,
+      ghostVis: loopGhostMesh ? loopGhostMesh.visible : false,
+      pitch: Number(carBody.rotation.x.toFixed(3)),
+      camUp: [Number(camera.up.y.toFixed(3)), Number(camera.up.z.toFixed(3))]
     }),
     groundAt: (x, z) => groundHeightAt(x, z),
     setAir: (x, z, y, heading, speed) => {
