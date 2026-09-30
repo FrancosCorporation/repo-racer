@@ -876,6 +876,10 @@ for (const [rx, rz, rotY] of RAMP_DEFS) {
 let loopGround = null; // altura do tubo do looping (definido no bloco abaixo)
 let loopLaps = 0;
 let loopLapStart = -1;
+let loopTSim = 0; // cronometro da volta em TEMPO DE SIMULACAO (s): 1000 passos
+// de harness em 1 evaluate rodam em milissegundos de parede — performance.now
+// gravaria \"0.01s\". performance.now segue sendo usado so para a janela de
+// 45s da corrente (tempo real entre voltas).
 let loopBestFlash = 0;
 let loopBestShown = false; // garante 1 toast por recorde (reset no restart)
 let loopLight = null; // ponto de luz animado do cenario do looping
@@ -3456,7 +3460,8 @@ function update(dt) {
         state.loopPitchFrom = carBody.rotation.x; // suaviza a quina deck -> tubo
         state.loopPitchBlend = 1;
         loopLaps = 0;
-        loopLapStart = performance.now();
+        loopLapStart = 0; // sentinela: a volta passa a ser cronometrada em loopTSim
+        loopTSim = 0;
         state.moveH = 0;
         /* #5 volta encadeada: re-entrou <45s depois da saida -> o boost do
            pad e concedido na mao (e a corrente soma pontos la na saida) */
@@ -3501,6 +3506,7 @@ function update(dt) {
       }
     }
     if (state.looping) {
+      loopTSim += dt; // relogio da volta: tempo de SIMULACAO, nao de parede
       const w = Math.abs(state.speed) / LOOP.R; // velocidade angular real do motor
       state.loopA += w * dt;
       // o passeio nao teleporta o carro pro eixo: converge suave pro centro
@@ -3520,17 +3526,19 @@ function update(dt) {
         }
       }
       if (state.loopA >= LOOP_A_EXIT) {
-        // fim da volta na BOCA NORTE: a posicao continua na rampa de saida
-        // cronometro so no FIM da volta: medir no inicio gravaria um recorde
-        // falso de um frame
+        // fim da volta na BOCA NORTE: a posicao continua na rampa de saida.
+        // cronometro em TEMPO DE SIMULACAO (loopTSim): medir com
+        // performance.now gravaria um recorde falso quando N passos rodam
+        // num so evaluate do harness (parede << simulacao).
         if (loopLapStart >= 0) {
-          const lapT = (performance.now() - loopLapStart) / 1000;
+          const lapT = loopTSim;
           loopLapT = lapT;
           const best = Number(localStorage.getItem(LOOP_BEST_KEY) || 0);
           if (!best || lapT < best) {
             try { localStorage.setItem(LOOP_BEST_KEY, String(lapT)); } catch (e) { /* sem storage */ }
             loopBestFlash = 1.2;
             loopBestTime = lapT;
+            updateLoopBestHud(); // HUD na hora (o toast do recorde pisca depois, no update)
           }
           // #4 ghost: guarda a gravacao se for a melhor da SESSAO (o tempo
           // recorde continua no localStorage, o caminho fica so na memoria)
@@ -3595,10 +3603,10 @@ function update(dt) {
         /* #4 ghost: grava esta volta e, se ja existe uma melhor, refez ela
            em paralelo (playback indexado pelo tempo real da volta) */
         if (loopGhostRec && loopLapStart >= 0) {
-          loopGhostRec.push([(performance.now() - loopLapStart) / 1000, car.position.x, state.y, car.position.z, carBody.rotation.x]);
+          loopGhostRec.push([loopTSim, car.position.x, state.y, car.position.z, carBody.rotation.x]);
         }
         if (loopGhostBest && loopGhostRec && loopGhostMesh && loopLapStart >= 0) {
-          const gt = (performance.now() - loopLapStart) / 1000;
+          const gt = loopTSim;
           const smp = loopGhostBest.s;
           while (loopGhostIdx + 1 < smp.length && smp[loopGhostIdx + 1][0] <= gt) loopGhostIdx++;
           if (gt <= smp[smp.length - 1][0]) {
@@ -3848,7 +3856,6 @@ function update(dt) {
     if (loopBestShown === false) {
       loopBestShown = true;
       toast('NOVO RECORDE DE VOLTA!' + (loopBestTime > 0 ? ' ' + loopBestTime.toFixed(2) + 's' : ''), '#39ff88');
-      updateLoopBestHud();
       tone(880, 0.16, { gain: 0.07 });
       tone(1174, 0.2, { gain: 0.07, delay: 0.1 });
     }
@@ -4185,6 +4192,11 @@ if (params.has('debug')) {
     bossEnd,
     setCar: (x, z, h, s) => {
       cancelLoopRide();
+      // o harness de validacao teleporta o carro sem passar pela tela de
+      // start: sem isso `update` trata o jogo como inativo e o TANK fica
+      // parado no deck (falso-negativo da validacao pos-reload)
+      if (!state.started) { state.started = true; state.startTime = performance.now(); try { document.getElementById('start').classList.add('hide'); } catch (e) {} }
+      if (state.finished) state.finished = false;
       car.position.x = x; car.position.z = z;
       state.y = 0; state.vy = 0; state.airborne = false;
       if (h !== undefined) { state.heading = h; state.moveH = h; state.slip = 0; }
