@@ -587,6 +587,59 @@ for (const r of ROADS) {
   scene.add(h);
 }
 
+/* --- faixas de pedestre nas esquinas + calçadas segmentadas: 2 draw calls
+   no total (InstancedMesh). Marcam as 25 interseções e ladeiam as ruas. --- */
+{
+  const crossGeo = new THREE.PlaneGeometry(1.1, 7.2);
+  crossGeo.rotateX(-Math.PI / 2);
+  const crossMat = new THREE.MeshBasicMaterial({ color: 0xd9e8f5, transparent: true, opacity: 0.34, toneMapped: false, depthWrite: false });
+  const crosswalks = [];
+  for (const rx of ROADS) for (const rz of ROADS) {
+    // travessia sobre a rua VERTICAL (faixas deitadas, z = rz ± 8.3)
+    for (const zs of [-1, 1]) for (let k = 0; k < 5; k++) {
+      crosswalks.push([rx - 3.2 + k * 1.6, rz + zs * 8.3, 0]);
+    }
+    // travessia sobre a rua HORIZONTAL (faixas de pé, x = rx ± 8.3)
+    for (const xs of [-1, 1]) for (let k = 0; k < 5; k++) {
+      crosswalks.push([rx + xs * 8.3, rz - 3.2 + k * 1.6, Math.PI / 2]);
+    }
+  }
+  const crossMesh = new THREE.InstancedMesh(crossGeo, crossMat, crosswalks.length);
+  const cd = new THREE.Object3D();
+  crosswalks.forEach(([cx, cz, rot], i) => {
+    cd.position.set(cx, 0.035, cz);
+    cd.rotation.set(0, rot, 0);
+    cd.scale.set(1, 1, 1);
+    cd.updateMatrix();
+    crossMesh.setMatrixAt(i, cd.matrix);
+  });
+  crossMesh.renderOrder = 1;
+  scene.add(crossMesh);
+
+  // calçadas entre esquinas: 3 segmentos por lado por rua (centro e extremos)
+  const walkGeo = new THREE.BoxGeometry(1, 1, 1);
+  const walkMat = new THREE.MeshStandardMaterial({ color: 0x151b27, roughness: 0.85, metalness: 0.1, emissive: 0x050b14, emissiveIntensity: 0.5 });
+  const walks = [];
+  for (const r of ROADS) {
+    for (const s of [-1, 1]) {
+      for (const c of [0, -160, 160]) {
+        walks.push([r + s * 8.1, c, 148, 0]); // ladeia a rua vertical
+        walks.push([c, r + s * 8.1, 148, 1]); // ladeia a rua horizontal
+      }
+    }
+  }
+  const walkMesh = new THREE.InstancedMesh(walkGeo, walkMat, walks.length);
+  walks.forEach(([wx, wz, len, vertical], i) => {
+    cd.position.set(wx, 0.07, wz);
+    cd.rotation.set(0, 0, 0);
+    cd.scale.set(vertical ? 2.6 : len, 0.14, vertical ? len : 2.6);
+    cd.updateMatrix();
+    walkMesh.setMatrixAt(i, cd.matrix);
+  });
+  walkMesh.receiveShadow = true;
+  scene.add(walkMesh);
+}
+
 /* --- poças refletivas nas ruas: manchas brilhantes fixas que recebem
    o reflexo do ambiente — baratas (1 draw cada) e mudam o visual todo --- */
 const puddleTex = makeRadialTexture('rgba(150,190,220,0.5)', 'rgba(90,130,170,0.28)', 'rgba(40,60,90,0)');
@@ -697,8 +750,27 @@ function addBuilding(x, z, w, d, h) {
     scene.add(sign);
   }
   buildings.push({ x, z, w, d, h });
+  // variedade de topo: caixa tecnica + antena com luz vermelha (1 em cada 4)
+  if (hashPick(x, z, 4) === 0) {
+    const box = new THREE.Mesh(unitBoxGeo, roofMat);
+    box.scale.set(w * 0.4, 1.4 + rand() * 1.2, d * 0.4);
+    box.position.set(x + (rand() - 0.5) * w * 0.3, h + box.scale.y / 2, z + (rand() - 0.5) * d * 0.3);
+    scene.add(box);
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 3.4, 6), roofMat);
+    ant.position.set(box.position.x, h + box.scale.y + 1.7, box.position.z);
+    scene.add(ant);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), antennaMat);
+    tip.position.set(ant.position.x, ant.position.y + 1.8, ant.position.z);
+    scene.add(tip);
+    antennaTips.push(tip);
+  }
 }
 const BLOCKS = [];
+// materiais de detalhe de topo (declarados antes de addBuilding: a funcao roda
+// durante a geracao dos quarteiroes, e const em TDZ daria ReferenceError)
+const roofMat = new THREE.MeshStandardMaterial({ color: 0x1c2530, roughness: 0.6, metalness: 0.5 });
+const antennaMat = new THREE.MeshBasicMaterial({ color: 0xff4d5e, toneMapped: false });
+const antennaTips = []; // piscam em modo alarme no update
 for (const bx of [-120, -40, 40, 120]) {
   for (const bz of [-120, -40, 40, 120]) BLOCKS.push([bx, bz]);
 }
@@ -750,6 +822,14 @@ scene.add(ringMesh);
 ringCap.instanceMatrix.needsUpdate = true;
 if (ringCap.instanceColor) ringCap.instanceColor.needsUpdate = true;
 scene.add(ringCap);
+// luzes vermelhas de antena salpicando o skyline da orla
+for (let i = 0; i < 26; i++) {
+  const a = rand() * Math.PI * 2, r = 218 + rand() * 70;
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), antennaMat);
+  tip.position.set(Math.cos(a) * r, 16 + rand() * 62, Math.sin(a) * r);
+  scene.add(tip);
+  antennaTips.push(tip);
+}
 
 const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff2cc, emissive: 0xffd27a, emissiveIntensity: 3.2 });
 const poleMat = new THREE.MeshStandardMaterial({ color: 0x1c2530, roughness: 0.6, metalness: 0.5 });
@@ -3468,6 +3548,9 @@ function update(dt) {
   }
   updateSparks(dt);
   updateWindowBlink(dt);
+  // antenas piscam em modo alarme (on/off longo, custo zero: visibility)
+  const beaconOn = Math.sin(performance.now() * 0.0016) > -0.2;
+  for (const tip of antennaTips) tip.visible = beaconOn;
   if (loopBestFlash > 0) {
     loopBestFlash -= dt;
     if (loopBestShown === false) {
@@ -3824,6 +3907,8 @@ if (params.has('debug')) {
     wayArrowMesh,
     pads,
     resetCrash: () => { crashCd = 0; },
+    instancedCounts: () => scene.children.filter((o) => o.isInstancedMesh).map((o) => o.count),
+    antennaCount: () => antennaTips.length,
     step: (n = 1) => { for (let i = 0; i < n; i++) { update(FIXED_DT); present(FIXED_DT); } },
   };
 }

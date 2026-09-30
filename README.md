@@ -43,8 +43,11 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
 
 - **Cidade neon 3D** com prédios de janelas iluminadas, postes, estrelas,
   névoa e **bloom** (pós-processamento) com tone mapping cinematográfico —
-  agora com o tubo do looping brilhando, faixa de pedestre e postes no
-  entorno do laço e HUD mais polida (combo com "pop", minimap emoldurado)
+  agora com **faixas de pedestre nas 25 esquinas**, **calçadas** ladeando as
+  10 avenidas e **antenas com luz vermelha piscando** nos topos (custo de
+  render: 2 draw calls instanciados). O tubo do looping brilha, o entorno
+  do laço ganhou muros, lixeiras e postes, e a HUD está mais polida (combo
+  com "pop", minimap emoldurado)
 - **Garagem com 3 carros** — NEON (equilibrado), PHANTOM (veloz, traseira
   solta) e TANK (firme) — cada um com cor e dirigibilidade próprias
 - **Nitro (Shift)** com barra de recarga, chamas no escapamento e FOV dinâmico
@@ -222,7 +225,7 @@ https://francoscorporation.github.io/repo-racer/
   `hurtPlayer`, `bossEnd`, `resetScore`, `resetProgress`, `keys`, `traffic`,
   `buildings`, `sparksCount`, `bumperDent`, `puddles`, `windowGlow`,
   `bossBlob`, `blinkerMat`, `loopCoins`, `loopBoostPads`, `wayArrowMesh`,
-  `pads`, `resetCrash`)
+  `pads`, `resetCrash`, `instancedCounts`, `antennaCount`)
 - **GitHub Pages** — hospedagem estática
 
 ## Rodar localmente
