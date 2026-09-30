@@ -256,12 +256,26 @@ mesmo relógio. `performance.now` segue usado só para a janela de 45 s da
 corrente (tempo real entre voltas). Volta do TANK validada: **2,02 s**
 (120 frames), HUD + toast `NOVO RECORDE DE VOLTA! 2,02s` imediatos.
 
-### 6.2 Dívidas conhecidas (não-bugs)
+### 6.2 Dívidas conhecidas — RESOLVIDAS ✅
 
-- O fantasma vive só na sessão (o tempo persiste no `localStorage`, o caminho
-  não) — persistir o caminho pesaria o storage; decisão de design futura.
-- `__rr.setCar` não faz snap da câmera: screenshot imediata após teleporte do
-  harness pega frame transitório. No jogo real não há teleporte, então não
-  afeta jogadores.
-- TANK sem pad/nitro não atinge os 133 km/h e rebate na boca — por design
-  (toast explica); balanceamento futuro pode suavizar.
+As três dívidas da rodada anterior foram todas fechadas (validadas em
+Chrome headless + SwiftShader, harness CDP em Node):
+
+- **Ghost persistente** ✅ — o caminho do recorde agora vai junto com o tempo
+  no `localStorage` (`LOOP_GHOST_KEY`, quantizado ~1 amostra/3 frames, volta
+  de ~2 s ≈ 1 KB). Na abertura, `loadLoopGhost()` restaura o fantasma se o
+  caminho bater com o tempo salvo; `startGame()` não zera mais o
+  `loopGhostBest`. Validado: volta → reload real → `ghost:true`, HUD `2,03s`,
+  41 amostras restauradas.
+- **Snap de câmera no `setCar`** ✅ — o teleporte do harness posiciona a
+  câmera atrás do carro e olha pra ele na hora; screenshot imediata não pega
+  mais frame transitório. Só roda via `__rr.setCar` (no jogo real não há
+  teleporte).
+- **TANK** ✅ — turbo extra só dele (`+8·dt`, teto `LOOP_NEED_V·1,1`) fecha a
+  conta do pad sem catapultar os outros carros; `crossV` agora é lido DEPOIS
+  do turbo (antes o TANK rebatia na boca no mesmo quadro em que ganhava
+  velocidade suficiente). Validado: entra pelos pads e fecha a volta
+  (`lapT ≈ 2,15 s`). Sem pad/nitro ele continua rebatendo — por design, com
+  toast explicando os 133 km/h.
+- **Harness**: `__rr.selCar(i)` troca de carro sem passar pela garagem
+  (aplica stats + pintura).

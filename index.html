@@ -900,6 +900,7 @@ let camUpY = 1, camUpZ = 0;
 const loopLapsEl = document.getElementById('loop-laps');
 const loopCoins = [];
 const LOOP_BEST_KEY = 'francos-repo-racer-loopbest';
+const LOOP_GHOST_KEY = 'francos-repo-racer-loopghost'; // caminho do fantasma recorde
 const loopBestEl = document.getElementById('loop-best');
 function updateLoopBestHud() {
   if (!loopBestEl) return;
@@ -908,6 +909,8 @@ function updateLoopBestHud() {
   loopBestEl.textContent = b > 0 ? b.toFixed(2) + 's' : '--';
 }
 updateLoopBestHud(); // mostra o recorde salvo ja na abertura
+/* loadLoopGhost() so pode rodar depois (usa ensureLoopGhost/scene); chamado
+   no fim do setup, apos a cena existir. */
 /* Ghost da melhor volta (#4): um clone translucido do carro que refez o
    caminho gravado. Criado sob demanda (a primeira so gravar uma volta). */
 function ensureLoopGhost() {
@@ -931,6 +934,43 @@ function ensureLoopGhost() {
   scene.add(g);
   loopGhostMesh = g;
   return g;
+}
+/* Ghost persistente: o recorde de TEMPO ja ficava no localStorage; agora o
+   CAMINHO vai junto (quantizado: ~1 amostra a cada 3 frames, 1 casa decimal
+   nas posicoes, 2 no pitch — uma volta de ~2 s cabe em ~6 KB, longe do teto
+   de 5 MB). Na abertura, se o tempo salvo e o caminho baterem, o fantasma
+   volta a existir sem precisar refazer a volta. */
+function saveLoopGhost() {
+  if (!loopGhostBest || !loopGhostBest.s || !loopGhostBest.s.length) return;
+  try {
+    const q = [];
+    const s = loopGhostBest.s;
+    for (let i = 0; i < s.length; i += 3) {
+      const a = s[i];
+      q.push([+a[0].toFixed(2), +a[1].toFixed(1), +a[2].toFixed(1), +a[3].toFixed(1), +a[4].toFixed(2)]);
+    }
+    if ((s.length - 1) % 3 !== 0) {
+      const a = s[s.length - 1];
+      q.push([+a[0].toFixed(2), +a[1].toFixed(1), +a[2].toFixed(1), +a[3].toFixed(1), +a[4].toFixed(2)]);
+    }
+    localStorage.setItem(LOOP_GHOST_KEY, JSON.stringify({ t: loopGhostBest.t, s: q }));
+  } catch (e) { /* storage cheio/bloqueado: o ghost segue so na sessao */ }
+}
+function loadLoopGhost() {
+  let raw = null, b = 0;
+  try {
+    raw = localStorage.getItem(LOOP_GHOST_KEY);
+    b = Number(localStorage.getItem(LOOP_BEST_KEY) || 0);
+  } catch (e) { return; }
+  if (!raw || !(b > 0)) return;
+  try {
+    const g = JSON.parse(raw);
+    if (!g || !Array.isArray(g.s) || g.s.length < 8) return;
+    // o caminho so vale se for do recorde atual (evita fantasma de outra era)
+    if (Math.abs(g.t - b) > 0.005) return;
+    loopGhostBest = { t: g.t, s: g.s };
+    ensureLoopGhost();
+  } catch (e) { /* json corrompido: ignora */ }
 }
 /* --- LOOPING estilo Hot Wheels ---
    Pista de ENTRADA com guard-rails e boost pads que garantem a velocidade
@@ -3003,11 +3043,12 @@ function startGame() {
   applyCarChoice();
   resetBumper(); // nova corrida: carro novinho (sem amassado de sessao passada)
   loopBestShown = false;
-  // sessao nova: placar de voltas, corrente e ghost recomecam do zero
+  // sessao nova: placar de voltas, corrente e gravacao recomecam do zero;
+  // o ghost do recorde (loopGhostBest) SOBREVIVE: foi carregado do
+  // localStorage na abertura e segue visivel sem precisar refazer a volta
   loopLapsTotal = 0;
   loopStreak = 0;
   loopLastExitT = -1;
-  loopGhostBest = null;
   loopGhostRec = null;
   if (loopLapsEl) loopLapsEl.textContent = '0';
   state.started = true;
@@ -3449,6 +3490,12 @@ function update(dt) {
     if (!state.looping && !state.airborne
       && Math.abs(car.position.x - LOOP.x) <= LOOP.W / 2
       && preZ <= LOOP.z - LOOP_MOUTH && car.position.z > LOOP.z - LOOP_MOUTH) {
+      // TANK: o pad o deixa a ~10% do minimo e o peso cobra o resto — um turbo
+      // extra so dele (stats.max 29 -> ~36 no deck) fecha a conta sem catapultar
+      // os outros carros (o teto do pad continua LOOP_NEED_V * 1.15 pra todos).
+      // NOTA: crossV precisa refletir o turbo (era lido antes e o TANK rebatia
+      // na boca mesmo com velocidade suficiente no mesmo quadro).
+      if (selectedCar === 2) state.speed = Math.min(state.speed + 8 * dt, LOOP_NEED_V * 1.1);
       const crossV = Math.abs(state.speed);
       if (crossV >= LOOP_NEED_V && Math.cos(state.heading) > 0.5 && state.y < deckH(-LOOP_MOUTH) + 1.2) {
         state.looping = true;
@@ -3497,7 +3544,8 @@ function update(dt) {
         // teto no boost: garante o laco sem transformar o pad em catapulta.
         // state.padBoost levanta o teto de velocidade por ~1,2s: sem isso o
         // clamp do frame seguinte devolvia o carro ao max dele (TANK ficava
-        // preso abaixo do minimo do laco pra sempre)
+        // preso abaixo do minimo do laco pra sempre). O TANK ainda sai do pad
+        // ~10% abaixo do minimo — o turbo extra dele fecha a conta (abaixo).
         state.speed = Math.min(state.speed + 26, LOOP_NEED_V * 1.15);
         state.padBoost = 1.2;
         pad.used = 0.7;
@@ -3541,10 +3589,11 @@ function update(dt) {
             updateLoopBestHud(); // HUD na hora (o toast do recorde pisca depois, no update)
           }
           // #4 ghost: guarda a gravacao se for a melhor da SESSAO (o tempo
-          // recorde continua no localStorage, o caminho fica so na memoria)
+          // recorde continua no localStorage, o caminho vai junto — quantizado)
           if (loopGhostRec && loopGhostRec.length > 8 && (!loopGhostBest || lapT < loopGhostBest.t)) {
             loopGhostBest = { t: lapT, s: loopGhostRec };
             ensureLoopGhost(); // o fantasma passa a existir na primeira volta gravada
+            saveLoopGhost(); // persiste o caminho do recorde (volta apos reload)
           }
           loopGhostRec = null;
           loopLapStart = -1;
@@ -4197,8 +4246,17 @@ if (params.has('debug')) {
       // parado no deck (falso-negativo da validacao pos-reload)
       if (!state.started) { state.started = true; state.startTime = performance.now(); try { document.getElementById('start').classList.add('hide'); } catch (e) {} }
       if (state.finished) state.finished = false;
-      car.position.x = x; car.position.z = z;
       state.y = 0; state.vy = 0; state.airborne = false;
+      car.position.x = x; car.position.z = z;
+      // snap da camera no teleporte: posiciona atras do carro e olha pra ele
+      // na hora (evita N frames de travelling no screenshot do harness). No
+      // jogo real nao ha teleporte — este bloco so roda via __rr.setCar.
+      if (h !== undefined) {
+        const bx = x - Math.sin(h) * 14, bz = z - Math.cos(h) * 14;
+        camera.position.set(bx, state.y + 6.8, bz);
+        camera.up.set(0, 1, 0); camUpY = 1; camUpZ = 0;
+        camera.lookAt(x + Math.sin(h) * 7, 1.6 + state.y * 0.8, z + Math.cos(h) * 7);
+      }
       if (h !== undefined) { state.heading = h; state.moveH = h; state.slip = 0; }
       if (s !== undefined) state.speed = s;
     },
@@ -4242,6 +4300,13 @@ if (params.has('debug')) {
       bestScoreCached = -1;
       try { localStorage.removeItem(SCORE_KEY); } catch (e) { /* sem storage */ }
     },
+    // troca de carro via harness (aplica stats + pintura sem passar pela garagem)
+    selCar: (i) => {
+      selectedCar = ((i % CARS.length) + CARS.length) % CARS.length;
+      try { applyCarChoice(); } catch (e) {}
+      Array.from(garageEl.children).forEach((el, j) => el.classList.toggle('sel', j === selectedCar));
+      return CARS[selectedCar].name;
+    },
     resetProgress: () => { phaseDone.length = 0; savePhaseDone(); },
     clearTraffic: () => { for (const t of traffic) { t.speed = 0; t.mesh.position.set(200, 0, 200); } },
     sparksCount: () => sparks.reduce((a, s) => a + (s.life > 0 ? 1 : 0), 0),
@@ -4261,6 +4326,9 @@ if (params.has('debug')) {
     antennaCount: () => antennaTips.length,
     step: (n = 1) => { for (let i = 0; i < n; i++) { update(FIXED_DT); present(FIXED_DT); } },
   };
+  // fantasma do recorde anterior volta junto (usa scene/ensureLoopGhost —
+  // por isso roda aqui no fim do setup, nao la no topo do modulo).
+  try { loadLoopGhost(); } catch (e) { /* sem storage/ghost: segue o jogo */ }
 }
 if (params.has('boss')) {
   startGame();
