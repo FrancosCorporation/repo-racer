@@ -3,8 +3,10 @@
 > Documento de trabalho da verificação do **looping estilo Hot Wheels** (e do
 > entorno) do Repo Racer. Reúne o diagnóstico com evidências medidas, as
 > correções aplicadas no `index.html`/`README.md` e o roteiro de validação.
-> Tudo o que está marcado como ✅ foi implementado neste commit; o que ficou
-> fora está no backlog (seção 6).
+> Série de commits: `3474c07` (B1–B9) → `de60ef0` (backlog 1–6) →
+> `408b068` (cronômetro `loopTSim`) → `64cb15f` (docs) → `31773a5`
+> (ghost persistente, snap de câmera, TANK). Tudo marcado como ✅ está
+> implementado e validado em Chrome headless; não há backlog pendente.
 
 ---
 

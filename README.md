@@ -72,7 +72,7 @@ aquecimento, circuito de portais, zona de drift, caçada, o laço infinito e o c
 - **Derrapagem lateral de verdade** — física com trajetória atrasada: a traseira
   escapa para o lado com inércia e atrito (não só visual), o carro perde
   velocidade no deslize e o chefão SEGV também derrapa fechando curva
-- **Fases em círculos**: cinco arenas circulares com desafios próprios e
+- **Fases em círculos**: seis arenas circulares com desafios próprios e
   desbloqueio por pontuação (veja [Fases](#fases))
 - **Trânsito com colisão**: carros circulam pelas avenidas e te atrapalham —
   agora com rodas, cabine escura e faixa de vidro, e **sem escalar as rampas**
@@ -135,7 +135,7 @@ aquecimento, circuito de portais, zona de drift, caçada, o laço infinito e o c
 - **HUD** com velocidade, nitro, pontos/combo, progresso e painel do repositório
 - **Controles de toque** para celular (com botão DERRAPA) e **suporte a
   gamepad** (analógico + botões)
-- **Qualidade adaptativa**: detecta mobile/GPU fraca e reduz sombras/pixel ratio (sem SMAA)
+- **Qualidade adaptativa**: detecta mobile/GPU fraca e reduz sombras/pixel ratio (SMAA só no desktop)
 - **Timestep fixo** de física (60 Hz) e limpeza de recursos ao sair
 
 ## Como jogar
@@ -158,7 +158,7 @@ recorde de pontos antes que o tempo acabe.
 
 ## Fases
 
-Espalhados pela cidade existem **cinco círculos de fase**. Chegue em cima de um
+Espalhados pela cidade existem **seis círculos de fase**. Chegue em cima de um
 deles: o HUD mostra o desafio e você escolhe a **dificuldade** (FÁCIL/MÉDIO/DIFÍCIL,
 botões no painel ou teclas **1/2/3**; **E** começa no médio). Cada fase tem
 objetivo, cronômetro e recompensa próprios, e as seguintes **abrem conforme a
@@ -204,7 +204,7 @@ destruí-los (+350 cada) — fora dessa janela você perde uma vida.
 
 ## O Chefão
 
-A fase 5 é o duelo contra **SEGV**, a máquina caçadora — o mesmo combate que
+A fase 6 é o duelo contra **SEGV**, a máquina caçadora — o mesmo combate que
 abre no botão **ENFRENTAR O CHEFÃO** depois de explorar os 13 repositórios.
 Atalho direto para o combate: `index.html?boss=1`.
 
@@ -230,7 +230,7 @@ https://francoscorporation.github.io/repo-racer/
 - **WebAudio** — som do motor e dos pneus gerado em tempo real
 - **HTML/CSS/JS puro** — sem build, sem dependências instaladas
 - **Debugar fácil**: com `?debug=1` o console ganha `window.__rr` para dirigir a
-  cena em testes (`setCar`, `setAir`, `step`, `carState`, `loopState`,
+  cena em testes (`setCar`, `selCar`, `setAir`, `step`, `carState`, `loopState`,
   `startPhase`, `phaseState`, `phaseStatus`, `enemies`, `startBoss`, `getBoss`,
   `damageBoss`, `hurtPlayer`, `bossEnd`, `resetScore`, `resetProgress`, `keys`,
   `traffic`, `buildings`, `sparksCount`, `bumperDent`, `puddles`, `windowGlow`,
