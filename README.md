@@ -29,7 +29,7 @@ Jogo 3D no navegador em que você dirige por uma cidade neon e **explora os
 repositórios** da FrancosCorporation: cada praça iluminada é um projeto — pare
 em cima, veja a descrição e pressione **E** para abrir no GitHub. Nos
 **círculos de fase** espalhados pela cidade os mesmos botões aceitam desafios:
-aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
+aquecimento, circuito de portais, zona de drift, caçada, o laço infinito e o chefão SEGV.
 
 [![Jogar](https://img.shields.io/badge/JOGAR-agora-39ff88?style=for-the-badge&logo=github&logoColor=white)](https://francoscorporation.github.io/repo-racer/)
 ![Three.js](https://img.shields.io/badge/Three.js-r160-000000?style=flat-square&logo=threedotjs)
@@ -90,7 +90,12 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
   aviso de velocidade**, e o portal sul funciona como **semáforo** (verde =
   dá para completar, vermelho = falta) — e boca de SAÍDA ao norte que te
   devolve na rua já descendo a rampa, **sem salto**: o passeio começa e
-  termina exatamente nas bocas do tubo. Cada volta completa vale **+800** e o
+  termina exatamente nas bocas do tubo. A entrada segue uma curva tangente ao
+  tubo (sem salto) e a volta é regida por **energia real** (a gravidade segura
+  na subida e empurra na descida). A **câmera acompanha a tangente** (roll +
+  FOV do laço), o **fantasma translúcido** refaz sua melhor volta da sessão,
+  e re-entrar em 45 s mantém o boost (**corrente de voltas**, até +1.200).
+  Cada volta completa vale **+800** (+300 por volta na corrente) e o
   tempo é mostrado no toast e na linha **MELHOR VOLTA** da HUD. **8 orbes** ao
   longo do laço valem **+200 cada** e renascem em 40 s; o **melhor tempo de
   volta** fica salvo no navegador — bater o recorde dispara o toast
@@ -165,7 +170,8 @@ sua pontuação**.
 | 2 | CIRCUITO NEON | portais | passar pelos 5 portais em ordem | 1.500 pts |
 | 3 | ZONA DE DRIFT | pista que solta | 1.500 pontos dentro do círculo | 4.000 pts |
 | 4 | CAÇADA | rivais | aguentar 50 s ou destruir os rivais | 8.000 pts |
-| 5 | SEGV // ARENA | chefão | derrotar SEGV no centro da cidade | 15.000 pts |
+| 5 | LAÇO INFINITO | looping | trazer as orbes do laço antes do tempo (x1/x2/x3) | 12.000 pts |
+| 6 | SEGV // ARENA | chefão | derrotar SEGV no centro da cidade | 15.000 pts |
 
 ### Dificuldade
 

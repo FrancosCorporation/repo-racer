@@ -220,16 +220,48 @@ passo normal (a posição é integrada e depois reparametrizada no arco) — é 
 quadro de 16 ms, invisível, e 5× menor que o salto original; a correção exata
 (exigiria dividir o quadro na linha da boca) ficou no backlog.
 
-## 6. Backlog (propostas para depois — não implementadas)
+## 6. Backlog — implementado nos commits `de60ef0` + `408b068` ✅
 
-1. **Entrada tangente de verdade:** o deck chega a 5,4° e a tigela do tubo a 30°
-   (quina inevitável com a geometria atual). Uma curva de transição (ou reduzir
-   `LOOP_MOUTH`) deixaria a entrada lisa sem depender do blend do chassi.
-2. **Passeio com energia real** (gravidade empurrando/segurando o carro) em vez
-   do auto-throttle atual — hoje o carro não perde velocidade subindo o laço.
-3. **Câmera dedicada do laço** (FOV + roll acompanhando a tangente) para vender
-   a inversão "de cabeça pra baixo".
-4. **Ghost/recorde visual** da melhor volta e placar de voltas por sessão.
-5. **Volta encadeada**: manter o boost se o jogador der duas voltas seguidas
-   (hoje cada passagem pelo tubo conta 1 volta).
-6. **Reaproveitar `loopCoins`** para um desafio de fase dentro do laço.
+Todos os 6 itens abaixo saíram do papel. Resumo do que foi feito (detalhes no
+`git show` de cada commit):
+
+1. **Entrada tangente de verdade** ✅ — o deck agora termina numa curva de
+   blend amostrada de `deckH(dz)` (mesma curva na física e no MESH do deck):
+   sem voo na chegada, gatilho de cruzamento da boca (posição prévia → atual),
+   ângulo inicial a partir do `preZ`. Salto de entrada caiu para
+   `dz 0,58 / dy −0,26` (indistinguível de um quadro normal).
+2. **Passeio com energia real** ✅ — dentro do laço a velocidade obedece
+   `v² −= 2·g·dy` (gravidade segura na subida, empurra na descida); sem fricção
+   de rua; sprint final assistido no último quarto. Volta do TANK ≈ 2,02 s.
+3. **Câmera dedicada do laço** ✅ — `camera.up` acompanha a tangente
+   (`(0, cos a, −sin a)`, eased em y/z sem estalo) + FOV +10 durante o passeio.
+   Inversão "de cabeça pra baixo" aparece na tela, não só no chassi.
+4. **Ghost/recorde visual** ✅ — `ensureLoopGhost()`: clone translúcido do
+   carro refaz o caminho gravado da melhor volta da sessão (playback indexado
+   pelo relógio de simulação); placar de voltas por sessão na HUD.
+5. **Volta encadeada** ✅ — re-entrar < 45 s após a saída mantém o boost
+   (`CORRENTE xN — BOOST MANTIDO!`) e soma pontos extras
+   (`800 + 300` por volta na corrente, até `+1200`).
+6. **Fase LAÇO INFINITO (`p6`)** ✅ — desafio de fase dentro do laço: cada orbe
+   conta 1 de progresso (`type: 'loop'`, overlay dedicado, meta por
+   dificuldade).
+
+### 6.1 Correção do cronômetro (`408b068`)
+
+O passeio media a volta com `performance.now()` (tempo de parede). Num harness
+que roda N passos de `1/60 s` num só `evaluate`, a parede é milissegundos e o
+recorde gravava `0,01 s` falso no `localStorage`. Agora o relógio é `loopTSim`
+(tempo de **simulação**, acumulado com `dt` dentro do passeio); o ghost usa o
+mesmo relógio. `performance.now` segue usado só para a janela de 45 s da
+corrente (tempo real entre voltas). Volta do TANK validada: **2,02 s**
+(120 frames), HUD + toast `NOVO RECORDE DE VOLTA! 2,02s` imediatos.
+
+### 6.2 Dívidas conhecidas (não-bugs)
+
+- O fantasma vive só na sessão (o tempo persiste no `localStorage`, o caminho
+  não) — persistir o caminho pesaria o storage; decisão de design futura.
+- `__rr.setCar` não faz snap da câmera: screenshot imediata após teleporte do
+  harness pega frame transitório. No jogo real não há teleporte, então não
+  afeta jogadores.
+- TANK sem pad/nitro não atinge os 133 km/h e rebate na boca — por design
+  (toast explica); balanceamento futuro pode suavizar.
