@@ -83,15 +83,19 @@ aquecimento, circuito de portais, zona de drift, caçada e o chefão SEGV.
   inclusive de marcha à ré e **chegando pelo ar**; atacar pela lateral ou por
   trás **não atravessa** a rampa, o carro bate e para na face)
 - **Looping estilo Hot Wheels** (perto da praça `36, 36`): pista de ENTRADA
-  com guard-rails e **boost pads** que garantem os ~119 km/h do laço (o NEON
-  chega sozinho em velocidade máxima; os outros carros usam os pads), tubo
-  com casca sólida — quem vai devagar **quica na boca e volta**, ninguém
-  atravessa a estrutura — e boca de SAÍDA ao norte que te devolve na rua já
-  descendo a rampa. Cada volta completa vale **+800**. **8 orbes** ao longo
-  do laço valem **+200 cada**, e o **melhor tempo de volta** fica salvo no
-  navegador — bater o recorde dispara o toast "NOVO RECORDE DE VOLTA!". O
-  cenário em volta ganhou vida: muros, lixeiras, postes acesos e uma luz
-  ciano que orbita a estrutura
+  com guard-rails e **boost pads** que garantem os ~133 km/h exigidos pelo laço
+  (o NEON chega sozinho em velocidade máxima; o TANK precisa dos pads ou do
+  nitro — o boost deles vale por ~1,2 s, então não é engolido pelo teto de
+  velocidade), tubo com casca sólida — quem vai devagar **quica na boca, com
+  aviso de velocidade**, e o portal sul funciona como **semáforo** (verde =
+  dá para completar, vermelho = falta) — e boca de SAÍDA ao norte que te
+  devolve na rua já descendo a rampa, **sem salto**: o passeio começa e
+  termina exatamente nas bocas do tubo. Cada volta completa vale **+800** e o
+  tempo é mostrado no toast e na linha **MELHOR VOLTA** da HUD. **8 orbes** ao
+  longo do laço valem **+200 cada** e renascem em 40 s; o **melhor tempo de
+  volta** fica salvo no navegador — bater o recorde dispara o toast
+  "NOVO RECORDE DE VOLTA!". O cenário em volta ganhou vida: muros alinhados ao
+  corredor, lixeiras, postes acesos e uma luz ciano que orbita a estrutura
 - **Orla sólida**: os prédios do skyline no fim das avenidas agora têm colisão —
   não dá mais para entrar no meio deles
 - **Som procedural** (WebAudio, sem arquivos): motor que responde à
@@ -216,14 +220,14 @@ https://francoscorporation.github.io/repo-racer/
 ## Stack
 
 - **Three.js** (r160, via CDN) — cena, luzes com sombras, reflexos (IBL),
-  sprites, pós-processamento (bloom)
+  sprites, pós-processamento (bloom + vinheta/CA + **SMAA**)
 - **WebAudio** — som do motor e dos pneus gerado em tempo real
 - **HTML/CSS/JS puro** — sem build, sem dependências instaladas
 - **Debugar fácil**: com `?debug=1` o console ganha `window.__rr` para dirigir a
-  cena em testes (`setCar`, `setAir`, `step`, `carState`, `startPhase`,
-  `phaseState`, `phaseStatus`, `enemies`, `startBoss`, `getBoss`, `damageBoss`,
-  `hurtPlayer`, `bossEnd`, `resetScore`, `resetProgress`, `keys`, `traffic`,
-  `buildings`, `sparksCount`, `bumperDent`, `puddles`, `windowGlow`,
+  cena em testes (`setCar`, `setAir`, `step`, `carState`, `loopState`,
+  `startPhase`, `phaseState`, `phaseStatus`, `enemies`, `startBoss`, `getBoss`,
+  `damageBoss`, `hurtPlayer`, `bossEnd`, `resetScore`, `resetProgress`, `keys`,
+  `traffic`, `buildings`, `sparksCount`, `bumperDent`, `puddles`, `windowGlow`,
   `bossBlob`, `blinkerMat`, `loopCoins`, `loopBoostPads`, `wayArrowMesh`,
   `pads`, `resetCrash`, `instancedCounts`, `antennaCount`)
 - **GitHub Pages** — hospedagem estática
@@ -239,6 +243,7 @@ python3 -m http.server 8080
 
 ```
 index.html            # o jogo inteiro (cena, física arcade, áudio, HUD, controles)
+MELHORIAS-LOOPING.md  # verificação do looping: diagnóstico, correções, validação
 preview.png           # screenshot usado no README
 Dockerfile            # nginx:alpine servindo os estáticos (sem build de app)
 docker-compose.yml    # atalho: docker compose up --build na porta 8080

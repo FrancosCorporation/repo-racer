@@ -173,6 +173,7 @@
     <div class="speed"><span id="speed">0</span> <span class="unit">km/h</span></div>
     <div class="row"><span id="timer">00:00</span><span id="sound">som: on</span></div>
     <div class="score-row"><span>PONTOS <span id="score">0</span></span><span id="combo"></span></div>
+    <div class="row"><span>MELHOR VOLTA</span><span id="loop-best">--</span></div>
     <div id="nitro-wrap"><div id="nitro"></div></div>
   </div>
   <div id="way" class="box">
@@ -263,6 +264,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 
 const REPOS = [
   { name: 'PERFIL', desc: 'Todos os projetos, curriculo e contato', url: 'https://github.com/FrancosCorporation', color: 0xffffff },
@@ -876,8 +878,20 @@ let loopLapStart = -1;
 let loopBestFlash = 0;
 let loopBestShown = false; // garante 1 toast por recorde (reset no restart)
 let loopLight = null; // ponto de luz animado do cenario do looping
+let loopGateMat = null; // portal sul do laço: vira "semáforo" de velocidade
+let loopHintCd = 0; // cooldown do aviso de velocidade minima
+let loopLapT = 0; // duracao da ultima volta fechada (s)
+let loopBestTime = 0; // melhor volta da ultima batida de recorde (para o toast)
 const loopCoins = [];
 const LOOP_BEST_KEY = 'francos-repo-racer-loopbest';
+const loopBestEl = document.getElementById('loop-best');
+function updateLoopBestHud() {
+  if (!loopBestEl) return;
+  let b = 0;
+  try { b = Number(localStorage.getItem(LOOP_BEST_KEY) || 0); } catch (e) { b = 0; }
+  loopBestEl.textContent = b > 0 ? b.toFixed(2) + 's' : '--';
+}
+updateLoopBestHud(); // mostra o recorde salvo ja na abertura
 /* --- LOOPING estilo Hot Wheels ---
    Pista de ENTRADA com guard-rails e boost pads que garantem a velocidade
    minima, tubo circular com CASCA SOLIDA (quem vai devagar bate e e jogado
@@ -888,6 +902,16 @@ const LOOP = { x: 36, z: 36, R: 11, W: 9 };
 // z0/z1 sao RELATIVOS a LOOP.z: deckH(dz) espera dz = z - LOOP.z
 const LOOP_DECK = { z0: -21, z1: -5.5, h: 1.47 };
 const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_DECK.z0));
+/* Boca do tubo (a "janela" por onde a pista passa) e o angulo dela no laco.
+   O passeio comeca e termina EXATAMENTE aqui: antes ele comecava em a=0 (ponto
+   mais baixo) e o carro dava um teleporte de ~6u na entrada e outro na saida. */
+const LOOP_MOUTH = LOOP_DECK.z1 * -1; // 5.5
+const LOOP_A_MOUTH = Math.asin(LOOP_MOUTH / LOOP.R); // ~0.524 rad (30 graus)
+const LOOP_A_EXIT = Math.PI * 2 + LOOP_A_MOUTH; // volta completa + boca norte
+// velocidade minima fisica do laco (energia para chegar ao topo, folga de 2%)
+const LOOP_NEED_V = Math.sqrt(2 * 26 * (2 * LOOP.R)) * 0.98;
+// normaliza um angulo para [-pi, pi] (evita "piro" no blend do chassi)
+const wrapPi = (a) => a - Math.round(a / (Math.PI * 2)) * Math.PI * 2;
 {
   const cy = LOOP.R; // centro do laco: o ponto de baixo encosta no chao (y=0)
   const stripes = document.createElement('canvas');
@@ -903,8 +927,10 @@ const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_
   stripeTex.repeat.set(10, 1);
   stripeTex.anisotropy = 8;
 
-  // faixas viram emissiveMap: o tubo brilha por si mesmo (a textura acende)
-  const tubeMat = new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.5, metalness: 0.35, emissiveMap: stripeTex, emissive: 0xffffff, emissiveIntensity: 0.2, envMapIntensity: 0.9, side: THREE.DoubleSide });
+  // faixas viram emissiveMap: o tubo brilha por si mesmo (a textura acende).
+  // polygonOffset evita o z-fighting do fundo do tubo com o chao (os dois ficam
+  // em y=0, onde o laco encosta no piso)
+  const tubeMat = new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.5, metalness: 0.35, emissiveMap: stripeTex, emissive: 0xffffff, emissiveIntensity: 0.2, envMapIntensity: 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   /* O tubo é uma calota com DUAS JANELAS: o arco superior (de boca a boca)
      + a "tigela" do fundo onde o piso toca o chao. As janelas inferiores sao
      exatamente por onde a pista de ENTRADA (sul) e a de SAIDA (norte)
@@ -1040,25 +1066,29 @@ const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_
     }
   }
 
-  // portais de ENTRADA/SAIDA: marcam as janelas do tubo por onde a pista passa
+  // portais de ENTRADA/SAIDA: marcam as janelas do tubo por onde a pista passa.
+  // O portal SUL e o "semaforo" do laco: verde quando a velocidade ja da pra
+  // completar a volta, vermelho quando falta (feedback de gameplay).
   {
     const portalGeo = new THREE.BoxGeometry(0.22, 3.6, 0.22);
     const beamGeo = new THREE.BoxGeometry(LOOP.W + 0.8, 0.26, 0.26);
+    loopGateMat = new THREE.MeshStandardMaterial({ color: 0xff8c1a, roughness: 0.5, metalness: 0.4, emissive: 0xff8c1a, emissiveIntensity: 0.55 });
     for (const sgn of [-1, 1]) {
-      const zz = LOOP.z + sgn * 5.5;
+      const zz = LOOP.z + sgn * LOOP_MOUTH;
+      const mat = sgn < 0 ? loopGateMat : railMat;
       for (const sx of [-1, 1]) {
-        const post = new THREE.Mesh(portalGeo, railMat);
+        const post = new THREE.Mesh(portalGeo, mat);
         post.position.set(LOOP.x + sx * (LOOP.W / 2 + 0.1), 1.8, zz);
         post.castShadow = true;
         scene.add(post);
       }
-      const beam = new THREE.Mesh(beamGeo, railMat);
+      const beam = new THREE.Mesh(beamGeo, mat);
       beam.position.set(LOOP.x, 3.55, zz);
       scene.add(beam);
     }
   }
   // letreiros ENTRADA (sul) e SAIDA (norte) em pylons neon
-  const makeLoopSign = (txt, colorHex, zz) => {
+  const makeLoopSign = (txt, colorHex, zz, flip) => {
     const cv = document.createElement('canvas');
     cv.width = 256; cv.height = 64;
     const cx = cv.getContext('2d');
@@ -1068,15 +1098,26 @@ const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_
     cx.lineWidth = 4;
     cx.strokeRect(4, 4, 248, 56);
     cx.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
-    cx.font = 'bold 40px "Segoe UI", Arial, sans-serif';
     cx.textAlign = 'center';
     cx.textBaseline = 'middle';
-    cx.fillText(txt, 128, 35);
+    const signLines = String(txt).split('\n');
+    if (signLines.length > 1) {
+      cx.font = 'bold 30px "Segoe UI", Arial, sans-serif';
+      cx.fillText(signLines[0], 128, 22);
+      cx.font = 'bold 21px "Segoe UI", Arial, sans-serif';
+      cx.fillText(signLines[1], 128, 46);
+    } else {
+      cx.font = 'bold 40px "Segoe UI", Arial, sans-serif';
+      cx.fillText(signLines[0], 128, 35);
+    }
     const signTex = new THREE.CanvasTexture(cv);
     signTex.colorSpace = THREE.SRGBColorSpace;
     const sm = new THREE.MeshBasicMaterial({ map: signTex, transparent: true, toneMapped: false, side: THREE.DoubleSide });
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 1.8), sm);
     sign.position.set(LOOP.x, 4.3, zz);
+    // o plano nasce olhando para +z (norte); a placa do SUL precisa girar para
+    // ser lida por quem chega dirigindo para o norte
+    if (flip) sign.rotation.y = Math.PI;
     scene.add(sign);
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 4.3, 8), pilarMat || new THREE.MeshStandardMaterial({ color: 0x1a2230 }));
     post.position.set(LOOP.x + 2.8, 2.15, zz + 0.3);
@@ -1085,8 +1126,8 @@ const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_
     post2.position.x = LOOP.x - 2.8;
     scene.add(post2);
   };
-  makeLoopSign('ENTRADA', 0xffb300, LOOP.z - 24.5);
-  makeLoopSign('SAIDA', 0x39ff88, LOOP.z + 21.5);
+  makeLoopSign('ENTRADA\nMIN ' + Math.round(LOOP_NEED_V * 4) + ' KM/H', 0xffb300, LOOP.z - 24.5, true);
+  makeLoopSign('SAIDA', 0x39ff88, LOOP.z + 21.5, false);
   // boost pads na pista de entrada: garantem a velocidade minima do laco
   var loopBoostPads = [
     { dz: -18.5, used: 0 },
@@ -1115,16 +1156,19 @@ const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_
   {
     const crossMat = new THREE.MeshBasicMaterial({ color: 0xe8f2ff, transparent: true, opacity: 0.32, toneMapped: false, depthWrite: false });
     for (let k = 0; k < 7; k++) {
-      const bar = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 8.6), crossMat);
+      // faixa de pedestre da rua sul, de guia a guia (a pista tem 12 de largura)
+      const bar = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 11.5), crossMat);
       bar.rotation.x = -Math.PI / 2;
-      bar.position.set(LOOP.x - 6.3 + k * 2.1, 0.03, LOOP.z - 32.5);
+      bar.position.set(LOOP.x - 6.3 + k * 2.1, 0.03, LOOP.z - 36);
       bar.renderOrder = 1;
       scene.add(bar);
     }
     const sideMat = new THREE.MeshStandardMaterial({ color: 0x141c2a, roughness: 0.8, metalness: 0.2 });
     for (const sx of [-1, 1]) {
+      // muro alinhado ao corredor do laco: comeca na guia da rua (z = 6) e vai
+      // ate a altura da boca — antes ele atravessava a rua sul inteira
       const wall = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.5, 26), sideMat);
-      wall.position.set(LOOP.x + sx * 7.4, 0.75, LOOP.z - 30);
+      wall.position.set(LOOP.x + sx * 7.4, 0.75, LOOP.z - 17);
       wall.castShadow = true;
       scene.add(wall);
       const lampPost = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 5.6, 8), poleMat);
@@ -1138,7 +1182,8 @@ const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_
     const lidMat = new THREE.MeshStandardMaterial({ color: 0x27405a, roughness: 0.5, metalness: 0.7 });
     const trashMat = new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.75, metalness: 0.4 });
     for (let k = 0; k < 3; k++) {
-      const tx = LOOP.x + (k - 1) * 3.1 + 0.5, tz = LOOP.z - 34.5 + (k % 2) * 1.3;
+      // lixeiras no comeco do corredor (fora da pista: antes caíam no meio da rua)
+      const tx = LOOP.x + (k - 1) * 3.1 + 0.5, tz = LOOP.z - 25 + (k % 2) * 1.3;
       const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.46, 1.15, 10), trashMat);
       bin.position.set(tx, 0.58, tz);
       bin.castShadow = true;
@@ -1169,12 +1214,12 @@ const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_
     const onDeck = Math.abs(x - LOOP.x) <= (LOOP.W - 1) / 2;
     let h = -1;
     // tigela do fundo: a curva interna do tubo — continua o deck na boca
-    // (1.47 em |dz|=5.5) e mergulha ate 0 no centro. E o proprio trilho do passeio
-    if (Math.abs(dzz) <= 5.5) h = LOOP.R - Math.sqrt(LOOP.R * LOOP.R - dzz * dzz);
+    // (1.47 em |dz|=LOOP_MOUTH) e mergulha ate 0 no centro. E o trilho do passeio
+    if (Math.abs(dzz) <= LOOP_MOUTH) h = LOOP.R - Math.sqrt(LOOP.R * LOOP.R - dzz * dzz);
     if (dzz >= LOOP_DECK.z0 && dzz <= LOOP_DECK.z1 && onDeck) {
       h = Math.max(h, deckH(dzz));
     }
-    if (dzz >= 5.5 && dzz <= 21 && onDeck) {
+    if (dzz >= LOOP_MOUTH && dzz <= -LOOP_DECK.z0 && onDeck) {
       h = Math.max(h, deckH(-dzz)); // rampa de saida: espelho da entrada
     }
     return h;
@@ -1189,7 +1234,7 @@ const deckH = (dz) => LOOP_DECK.h * ((dz - LOOP_DECK.z0) / (LOOP_DECK.z1 - LOOP_
     coin.position.set(LOOP.x, LOOP.R - Math.cos(A) * LOOP.R - 0.9, LOOP.z + Math.sin(A) * LOOP.R);
     coin.rotation.y = Math.PI / 2;
     scene.add(coin);
-    loopCoins.push({ mesh: coin, a: A, taken: false });
+    loopCoins.push({ mesh: coin, a: A, taken: false, respawn: 0 });
   }
   loopLaps = 0;
 }
@@ -1838,6 +1883,7 @@ function startPhase(p, diff) {
   const di = clamp(diff === undefined ? lastDiff : Number(diff) | 0, 0, 2);
   lastDiff = di; saveDiff();
   const D = DIFFS[di];
+  cancelLoopRide();
   phaseState.active = true;
   phaseState.phase = p;
   phaseState.def = def;
@@ -2436,6 +2482,7 @@ function turnToward(h, want, rate, dt) {
 
 function startBoss() {
   if (state.bossActive || bossResult === 'win') return;
+  cancelLoopRide(); // duelo comecando: carro fora do passeio do laco
   if (!bossMesh) bossMesh = makeBossMesh();
   if (bossMesh.group.parent !== scene) scene.add(bossMesh.group);
   if (bossMesh.group.userData.blob) bossMesh.group.userData.blob.visible = true;
@@ -2780,7 +2827,7 @@ function visitChime() {
 function pickupBlip() { tone(560, 0.14, { freqEnd: 1120, gain: 0.06 }); }
 function comboBlip(combo) { tone(480 + combo * 90, 0.07, { gain: 0.05 }); }
 
-const state = { speed: 0, heading: 0, steer: 0, slip: 0, moveH: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, looping: false, driftCharge: 0, driftBoost: 0, loopA: 0, nitro: 1, boosting: false, started: false, startTime: 0, finished: false, bossActive: false };
+const state = { speed: 0, heading: 0, steer: 0, slip: 0, moveH: 0, pitch: 0, slope: 0, y: 0, vy: 0, airborne: false, looping: false, driftCharge: 0, driftBoost: 0, loopA: 0, loopX: 36, loopPitchFrom: 0, loopPitchBlend: 0, padBoost: 0, nitro: 1, boosting: false, started: false, startTime: 0, finished: false, bossActive: false };
 const stats = { accel: 1, max: 34, grip: 1 };
 car.position.set(0, 0, -34);
 car.rotation.y = 0;
@@ -3037,6 +3084,12 @@ function buildMinimapStatic() {
   }
   mmS.fillStyle = 'rgba(0, 229, 255, 0.5)';
   for (const r of ramps) mmS.fillRect(mmX(r.x) - 3, mmY(r.z) - 3, 6, 6);
+  // o looping e um landmark: anel laranja na camada estatica do minimapa
+  mmS.strokeStyle = 'rgba(255, 179, 0, 0.8)';
+  mmS.lineWidth = 2;
+  mmS.beginPath();
+  mmS.arc(mmX(LOOP.x), mmY(LOOP.z), Math.max(3, LOOP.R * mmScale), 0, Math.PI * 2);
+  mmS.stroke();
 }
 buildMinimapStatic();
 function drawMinimap() {
@@ -3128,6 +3181,18 @@ const GradeShader = {
 };
 const gradePass = new ShaderPass(GradeShader);
 composer.addPass(gradePass);
+/* Antialiasing do pos-processamento: o composer renderiza em render targets sem
+   MSAA, entao as bordas ficam serrilhadas sem este passe. Em LOW_END fica de
+   fora (custo) — por isso o `let smaa` de escopo de modulo usado no resize. */
+let smaa = null;
+if (!LOW_END) {
+  try {
+    smaa = new SMAAPass(window.innerWidth, window.innerHeight);
+    composer.addPass(smaa);
+  } catch (e) {
+    smaa = null; // driver/extensao sem suporte: segue sem AA
+  }
+}
 composer.addPass(new OutputPass());
 
 const clock = new THREE.Clock();
@@ -3167,9 +3232,29 @@ function finishMission() {
   document.getElementById('done').classList.add('show');
 }
 
+/* Inclinacao VISIVEL do chassi. O deck tem 5,4 graus e a tangente do tubo na
+   boca tem 30: trocar de um para o outro em um frame dava uma "cotovelada".
+   O blend de ~0,2s e ancorado no angulo que o carro ja tinha na tela, entao a
+   entrada e a saida do laco ficam suaves sem atrasar o rastreio da tangente. */
+function bodyPitch(target, dt) {
+  state.loopPitchBlend = Math.max(0, state.loopPitchBlend - dt * 5);
+  const k = state.loopPitchBlend;
+  carBody.rotation.x = state.loopPitchFrom * k + target * (1 - k);
+}
+
+// rede de seguranca: nada (fase, duelo, teleporte de teste) deve comecar com o
+// carro "grudado" no passeio do laco
+function cancelLoopRide() {
+  if (!state.looping) return;
+  state.looping = false;
+  state.loopA = 0;
+  state.loopPitchBlend = 0;
+}
+
 function update(dt) {
   const active = state.started && (!state.finished || state.bossActive || phaseState.active);
   crashCd = Math.max(0, crashCd - dt);
+  loopHintCd = Math.max(0, loopHintCd - dt);
   invulnT = Math.max(0, invulnT - dt);
   bossHitCd = Math.max(0, bossHitCd - dt);
   if (state.bossActive) {
@@ -3195,7 +3280,10 @@ function update(dt) {
     } else {
       state.nitro = Math.min(1, state.nitro + dt * 0.07);
     }
-    const maxSpeed = state.boosting ? stats.max * 1.45 : stats.max;
+    state.padBoost = Math.max(0, state.padBoost - dt);
+    // o boost dos pads do laco tambem levanta o teto de velocidade: sem isso o
+    // clamp do frame seguinte engole o ganho e o TANK nunca alcanca o laco
+    const maxSpeed = (state.boosting || state.padBoost > 0.001) ? stats.max * 1.45 : stats.max;
     state.speed = clamp(state.speed, MAX_REVERSE, maxSpeed);
     if (!state.boosting && state.speed > stats.max) state.speed -= 18 * dt;
 
@@ -3236,36 +3324,45 @@ function update(dt) {
     ? clamp(-state.vy * 0.045, -0.3, 0.3)
     : -Math.atan2(hAhead - hBehind, 2.8);
   state.slope += (targetSlope - state.slope) * Math.min(1, dt * 9);
-  carBody.rotation.x = state.pitch + state.slope;
+  bodyPitch(state.pitch + state.slope, dt);
   carBody.rotation.z = -state.steer * 0.07;
 
   /* --- LOOPING: passeio paramétrico ---
      Chegou na boca (dirigindo para norte, dentro do plano da boca) com
      velocidade suficiente? Gruda no trilho circular: o angulo avanca pela
      FORCA REAL do motor (w = v/R) e a orientacao acompanha a tangente (o carro
-     fica de cabeca pra baixo no topo). Completou a volta: solta no chao, +800.
-     A velocidade critica fisica (v^2 < g*R no topo) e respeitada: sem ela,
-     o passeio nem comeca. */
+     fica de cabeca pra baixo no topo).
+     O passeio comeca e termina NA BOCA (a = -asin(5.5/R) -> 2pi + asin(5.5/R)),
+     com a posicao entrando/saindo continua: nada de teleporte de ~6u.
+     Completou a volta: solta na rampa de saida, +800. A velocidade critica
+     fisica (v^2 < g*R no topo) e respeitada: sem ela o passeio nem comeca. */
   if (loopGround) {
     /* --- gatilho do passeio: deteccao de cruzamento da boca pelo MOVIMENTO
        (posicao previa -> atual). Exige chegada pelo deck, de frente para o
        tubo e com velocidade minima; os boost pads antes da boca cobrem o gap. --- */
-    const needV = Math.sqrt(2 * 26 * (2 * LOOP.R)) * 0.98; // energia do laco, folga de 2%: o NEON em velocidade maxima passa; os outros usam os pads
     if (!state.looping && !state.airborne
       && Math.abs(car.position.x - LOOP.x) <= LOOP.W / 2
-      && preZ <= LOOP.z - 5.5 && car.position.z > LOOP.z - 5.5) {
+      && preZ <= LOOP.z - LOOP_MOUTH && car.position.z > LOOP.z - LOOP_MOUTH) {
       const crossV = Math.abs(state.speed);
-      if (crossV >= needV && Math.cos(state.heading) > 0.5 && state.y < deckH(-5.5) + 1.2) {
+      if (crossV >= LOOP_NEED_V && Math.cos(state.heading) > 0.5 && state.y < deckH(-LOOP_MOUTH) + 1.2) {
         state.looping = true;
-        state.loopA = 0; // ponto mais baixo do tubo
+        // angulo inicial tirado da posicao REAL do carro (boca sul): continuo
+        state.loopA = Math.asin(clamp((car.position.z - LOOP.z) / LOOP.R, -1, 1));
+        state.loopX = car.position.x; // mantem o deslocamento lateral de entrada
+        state.loopPitchFrom = carBody.rotation.x; // suaviza a quina deck -> tubo
+        state.loopPitchBlend = 1;
         loopLaps = 0;
         loopLapStart = performance.now();
         state.moveH = 0;
-      } else if (crossV < needV) {
+      } else if (crossV < LOOP_NEED_V) {
         // chegou devagar demais: bate na subida interna e escorrega de volta
-        car.position.z = LOOP.z - 5.8;
+        car.position.z = LOOP.z - LOOP_MOUTH - 0.3;
         state.speed *= -0.25;
         shake = Math.min(1, shake + 0.3);
+        if (loopHintCd <= 0) {
+          toast('MUITO LENTO — O LACO PEDE ' + Math.round(LOOP_NEED_V * 4) + ' KM/H (USE OS PADS OU O NITRO)', '#ff5470');
+          loopHintCd = 5;
+        }
         onCrash();
       }
     }
@@ -3277,8 +3374,12 @@ function update(dt) {
         && Math.abs(car.position.z - (LOOP.z + pad.dz)) < 1.9
         && state.y > deckH(pad.dz) - 0.5 && state.y < deckH(pad.dz) + 2.2;
       if (near && pad.used <= 0) {
-        // teto no boost: garante o laco sem transformar o pad em catapulta
-        state.speed = Math.min(state.speed + 26, needV * 1.15);
+        // teto no boost: garante o laco sem transformar o pad em catapulta.
+        // state.padBoost levanta o teto de velocidade por ~1,2s: sem isso o
+        // clamp do frame seguinte devolvia o carro ao max dele (TANK ficava
+        // preso abaixo do minimo do laco pra sempre)
+        state.speed = Math.min(state.speed + 26, LOOP_NEED_V * 1.15);
+        state.padBoost = 1.2;
         pad.used = 0.7;
         pad.mesh.material.color.setHex(0xffffff);
         tone(880, 0.09, { gain: 0.05 });
@@ -3287,36 +3388,43 @@ function update(dt) {
     if (state.looping) {
       const w = Math.abs(state.speed) / LOOP.R; // velocidade angular real do motor
       state.loopA += w * dt;
+      // o passeio nao teleporta o carro pro eixo: converge suave pro centro
+      state.loopX += (LOOP.x - state.loopX) * Math.min(1, dt * 2.5);
       // orbes do laco: coleta por proximidade angular (mesma referencia do passeio)
       for (const c of loopCoins) {
         if (c.taken) continue;
         if (Math.abs(state.loopA - c.a) < 0.5 || Math.abs(state.loopA - c.a) > Math.PI * 2 - 0.5) {
           c.taken = true;
+          c.respawn = 40; // renascem como os coletaveis de N2O
           c.mesh.visible = false;
           scoreState.total += 200;
           pickupBlip();
           toast('ORBE DO LACO  +200', '#ffd54f');
         }
       }
-      if (state.loopA >= Math.PI * 2) {
+      if (state.loopA >= LOOP_A_EXIT) {
+        // fim da volta na BOCA NORTE: a posicao continua na rampa de saida
         // cronometro so no FIM da volta: medir no inicio gravaria um recorde
         // falso de um frame
         if (loopLapStart >= 0) {
           const lapT = (performance.now() - loopLapStart) / 1000;
+          loopLapT = lapT;
           const best = Number(localStorage.getItem(LOOP_BEST_KEY) || 0);
           if (!best || lapT < best) {
             try { localStorage.setItem(LOOP_BEST_KEY, String(lapT)); } catch (e) { /* sem storage */ }
             loopBestFlash = 1.2;
+            loopBestTime = lapT;
           }
           loopLapStart = -1;
         }
-        // completou a volta: solta no chao no ponto mais baixo, seguindo norte
         loopLaps++;
         scoreState.total += 800;
-        toast('LOOPING ' + loopLaps + 'x!  +800', '#ffb300');
+        toast('LOOPING!  +800' + (loopLapT > 0 ? ' · volta em ' + loopLapT.toFixed(2) + 's' : ''), '#ffb300');
         tone(520, 0.1, { gain: 0.06 });
         tone(660, 0.12, { gain: 0.06, delay: 0.09 });
         tone(880, 0.16, { gain: 0.06, delay: 0.2 });
+        state.loopPitchFrom = wrapPi(-LOOP_A_EXIT); // suaviza a quina tubo -> rampa
+        state.loopPitchBlend = 1;
         state.looping = false;
         state.loopA = 0;
         state.airborne = false;
@@ -3324,11 +3432,11 @@ function update(dt) {
         state.moveH = 0;
         state.heading = 0;
         state.slope = 0;
-        // solta JA NA RAMPA DE SAIDA (norte), na altura certa: o laco de
-        // brinquedo devolve o carro na pista, nao no meio do vazio
-        car.position.x = LOOP.x;
-        car.position.z = LOOP.z + 5.8;
-        state.y = deckH(-5.8);
+        // solta JA NA RAMPA DE SAIDA: o carro sai pela boca norte, na altura do
+        // deck — sem o antigo "pulo" de 6u pra fora do tubo
+        car.position.x = state.loopX;
+        car.position.z = LOOP.z + LOOP_MOUTH;
+        state.y = deckH(-LOOP_MOUTH);
         car.position.y = state.y;
       } else {
         const ca = Math.cos(state.loopA), sa = Math.sin(state.loopA);
@@ -3338,14 +3446,18 @@ function update(dt) {
         if (Math.abs(state.speed) < Math.sqrt(26 * LOOP.R) * 0.92) {
           state.speed += 30 * dt;
         }
-        car.position.x = LOOP.x;
+        car.position.x = state.loopX;
         car.position.z = LOOP.z + sa * LOOP.R;
         state.y = LOOP.R - ca * LOOP.R;
         car.rotation.y = 0;
-        carBody.rotation.x = -state.loopA; // acompanha a tangente (cabeca pra baixo no topo)
+        // olha a tangente normalizada (cabeca pra baixo no topo), com o blend
+        // da entrada pra nao "cotovelar" o chassi no primeiro frame
+        bodyPitch(wrapPi(-state.loopA), dt);
         carBody.rotation.z = 0;
         if (Math.abs(state.speed) < Math.sqrt(26 * LOOP.R) * 0.82) {
           // perdeu a forca centripeta antes de fechar: despenca
+          state.loopPitchFrom = wrapPi(-state.loopA);
+          state.loopPitchBlend = 1;
           state.looping = false;
           state.loopA = 0;
           state.airborne = true;
@@ -3372,10 +3484,27 @@ function update(dt) {
   // folga do passo: o que o carro sobe de fato andando na inclinacao, + a queda de um frame no ar
   const slack = 0.35 + (state.airborne ? Math.abs(state.vy) * dt : 0);
   const legalRise = rc ? (rc.H / rc.L) * spd * dt + slack : slack;
+  // PAREDE LATERAL DO TUBO DO LOOPING: cruzar a lateral do tubo (eixo X) onde a
+  // casca passa de ~25cm e parede, nao degrau. Sem isso o carro "subia" de lado
+  // na tigela (Δy de 1,2 em um frame) e atravessava a estrutura. O vao central
+  // (|dz| pequeno, onde o tubo encosta no chao) continua passavel.
+  const loopWall = !!loopGround && !state.airborne && !state.looping
+    && (Math.abs(preX - LOOP.x) > LOOP.W / 2) !== (Math.abs(car.position.x - LOOP.x) > LOOP.W / 2)
+    && Math.abs(car.position.z - LOOP.z) <= LOOP_MOUTH + 0.5
+    && Math.max(gh, state.y) > 0.25;
   // so entra pela face de subida. Vale tambem NO AR: sem isso o carro pulava por dentro
   // do paredao e o pouso teleportava ele pra cima da rampa.
-  const blocked = !!rc && rise > slack && !(approach > 0.25 && rise <= legalRise);
+  const blocked = loopWall || (!!rc && rise > slack && !(approach > 0.25 && rise <= legalRise));
   if (blocked) {
+    if (loopWall) {
+      // bateu na casca de lado: volta pro lugar, faisca e perde velocidade
+      car.position.x = preX;
+      state.vy = 0;
+      state.speed *= 0.6;
+      shake = Math.min(1, shake + 0.3);
+      spawnSparks(car.position.x + (Math.abs(preX - LOOP.x) > LOOP.W / 2 ? 1.4 : -1.4) * Math.sign(LOOP.x - car.position.x || 1), car.position.z, 5);
+      onCrash();
+    } else {
     const prevRc = rampAt(preX, preZ);
     const prevGh = groundHeightAt(preX, preZ);
     if (prevRc && prevGh - state.y > slack + 0.05) {
@@ -3395,14 +3524,13 @@ function update(dt) {
       state.speed *= 0.5; // raspou a lateral: segura sem lancar
       shake = Math.min(1, shake + 0.2);
     }
+    state.vy = 0;
     if (state.airborne) {
       // bateu na face no ar: perde a subida e cai colado na parede
       state.airborne = false;
-      state.vy = 0;
       state.y = groundHeightAt(car.position.x, car.position.z);
       shake = Math.min(1, shake + 0.35);
-    } else {
-      state.vy = 0;
+    }
     }
   } else if (!state.airborne) {
     if (gh > state.y - 0.02) {
@@ -3555,11 +3683,18 @@ function update(dt) {
     loopBestFlash -= dt;
     if (loopBestShown === false) {
       loopBestShown = true;
-      toast('NOVO RECORDE DE VOLTA!', '#39ff88');
+      toast('NOVO RECORDE DE VOLTA!' + (loopBestTime > 0 ? ' ' + loopBestTime.toFixed(2) + 's' : ''), '#39ff88');
+      updateLoopBestHud();
       tone(880, 0.16, { gain: 0.07 });
       tone(1174, 0.2, { gain: 0.07, delay: 0.1 });
     }
     if (loopBestFlash <= 0) loopBestShown = false;
+  }
+  // orbes do laco renascem 40 s depois de coletados (igual ao N2O)
+  for (const c of loopCoins) {
+    if (!c.taken) continue;
+    c.respawn -= dt;
+    if (c.respawn <= 0) { c.taken = false; c.mesh.visible = true; }
   }
   // piscada das setas do transito (material compartilhado: 1 conta so)
   const blinkOn = Math.sin(performance.now() * 0.0055) > 0.3;
@@ -3745,6 +3880,17 @@ function present(dt) {
       pad.mesh.material.opacity = pad.used > 0 ? 0.95 : 0.4 + Math.sin(lt * 5 + pad.dz) * 0.16;
     }
   }
+  // semaforo do laco: o portal sul fica verde quando a velocidade ja da pra
+  // completar a volta e vermelho quando falta (feedback pro jogador)
+  if (loopGateMat) {
+    const dzGate = car.position.z - LOOP.z;
+    const approaching = dzGate < -LOOP_MOUTH && dzGate > -38 && Math.abs(car.position.x - LOOP.x) < 12;
+    let gateCol = 0xff8c1a;
+    if (approaching) gateCol = Math.abs(state.speed) >= LOOP_NEED_V ? 0x39ff88 : 0xff2d3f;
+    loopGateMat.color.setHex(gateCol);
+    loopGateMat.emissive.setHex(gateCol);
+    loopGateMat.emissiveIntensity = approaching ? 1.05 : 0.55;
+  }
   if (state.started && !state.finished) {
     const elapsed = (performance.now() - state.startTime) / 1000;
     timerEl.textContent = String(Math.floor(elapsed / 60)).padStart(2, '0') + ':' + String(Math.floor(elapsed % 60)).padStart(2, '0');
@@ -3857,12 +4003,18 @@ if (params.has('debug')) {
     getBoss: () => boss,
     bossEnd,
     setCar: (x, z, h, s) => {
+      cancelLoopRide();
       car.position.x = x; car.position.z = z;
       state.y = 0; state.vy = 0; state.airborne = false;
       if (h !== undefined) { state.heading = h; state.moveH = h; state.slip = 0; }
       if (s !== undefined) state.speed = s;
     },
     carState: () => [car.position.x, car.position.z, state.y, state.vy, state.airborne],
+    loopState: () => ({
+      looping: state.looping, a: state.loopA, laps: loopLaps, lapT: loopLapT,
+      x: car.position.x, z: car.position.z, y: state.y, padBoost: state.padBoost,
+      gate: loopGateMat ? '#' + loopGateMat.color.getHexString() : null
+    }),
     groundAt: (x, z) => groundHeightAt(x, z),
     setAir: (x, z, y, heading, speed) => {
       car.position.x = x; car.position.z = z;
