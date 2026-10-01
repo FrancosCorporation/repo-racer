@@ -243,3 +243,32 @@ visual. Pendência cosmética única: **E5** (tampas de esgoto/faixas na rua).
 
 
 
+
+## 9. Rodada de feedback — laço, GPS, fachada e carro (30/09/2026) ✅
+
+Cada sintoma foi diagnosticado por screenshot + telemetria (harness CDP em Node
+com Chrome headless) antes de mexer no código — nenhuma correção por adivinhação.
+
+| Sintoma relatado | Causa real (achada no screenshot/objeto) | Correção |
+| --- | --- | --- |
+| "seta grande com uma sombra/funil bege à frente" | o **cone do farol**: `ConeGeometry(2.2, 15, 20)` a 9,6 m, opacidade 0,07, aditivo — uma tenda creme de 15×4,4 m | cone 1,25×8 m, opacidade **0,028**, colado no chão (0,55 m) |
+| "GPS: uma setinha grande e outra pequenininha" | `wayArrowMesh` com escala 0,92, 7 m à frente e anel de 1,6 m | escala **0,6**, 7 m à frente, 2,45 m de altura, anel menor e mais apagado |
+| "linhas pretas em volta do looping" | textura do tubo era `#141c2c` com **40 travessas pretas** e `DoubleSide` — via-se por fora | asfalto `#2a3650→#1b2436` com faixa central tracejada e linhas de borda, `repeat 6`, **`BackSide`** + casca externa |
+| "dentro do looping não tem parede nenhuma" | o tubo era só a textura; nada marcava as arestas por dentro | **casca sólida** (R+0,45, largura +0,6), **guard-rails** nas duas arestas, **fitas de neon** rente a elas, emissive 0,3→0,45 |
+| "a entrada do looping fica escondida" | cartaz de repo de **14 m** dentro do tubo: pad #1 em (40,40), a 5,6 m do centro; e pad #3 (40,-40) no corredor | pad #1 → (80,120) + **regra automática** que empurra qualquer pad alinhado com o corredor do laço; banner da fase `p6` sobe (13,5 m) e encolhe (9 m) |
+| "prédios com parede lisa" | textura 128×256 com janelas esparsas sobre fundo **100% preto** | 128×512 com faixa de andar, pilastras, grade 2× mais densa (janela acesa **e apagada**) e térreo com vitrine; **PRNG local** para não consumir o `rand()` global (layout da cidade idêntico) |
+| "o carro parece simples demais" | faltava o que a câmera de corrida realmente vê | faixa central no capô/teto/traseira, barra de freio de largura total, difusor com aletas, escapes e retrovisores |
+
+### Verificação (harness, 30/09/2026)
+
+| Teste | Resultado |
+| --- | --- |
+| Volta completa (`fb4.mjs`) | boca `a=-0,5` → lateral `y=4,5` → **topo `y=19,3`** → descida → **saída `laps=1`** |
+| Matriz de entrada (`entrada.mjs`) em 14/20/28/40 u/s | **4/4 completam a volta**, `travouFrames: 0` em todas |
+| Card no laço | **0 sprites** a menos de 18 m do centro do tubo (antes: 1 de 14 m em cima da pista) |
+| Erros de console | **0** em `vis.mjs`, `game-check.mjs` e `bce-check.mjs` |
+| Regressão de performance | luzes 7 = 7 = 7, frame **avg 16,6 ms · p95 19,5 ms**, SMAA/bloom intactos |
+
+**Veredito:** laço, GPS e a leitura visual do carro/prédio estão fechados com
+evidência. Pendências cosméticas que sobraram: **E5** (tampas de esgoto/faixas na
+rua) e o teste do **Qwen2.5-0.5B em navegador real**.

@@ -313,8 +313,11 @@ const REPOS = [
   { name: 'chat_criptografado', desc: 'Chat P2P com criptografia em Java', url: 'https://github.com/FrancosCorporation/chat_criptografado', color: 0xba68c8 }
 ];
 
+// O primeiro pad ficava em (40,40) — 5,6m do centro do laco: o disco e o
+// cartaz de 14m apareciam POR DENTRO do tubo, tapando a pista na ida e na
+// volta. Movido para (80,120), longe da estrutura.
 const PAD_POS = [
-  [40, 40], [-40, -40], [40, -40], [120, -40], [120, 40], [120, 120], [40, 120],
+  [80, 120], [-40, -40], [40, -40], [120, -40], [120, 40], [120, 120], [40, 120],
   [-40, 120], [-120, 120], [-120, 40], [-120, -40], [-40, -120], [40, -120]
 ];
 
@@ -712,28 +715,54 @@ for (const r of ROADS) {
   }
 }
 
+/* Fachada procedural. Antes: so janelas soltas sobre fundo 100% preto — de
+   perto o predio virava um bloco liso ("parede sem nada"). Agora ha estrutura
+   (faixa de andar + pilastras), grade de janelas 2x mais densa com estado
+   apagado visivel e base de loja acesa. PRNG LOCAL de proposito: nao consome
+   o rand() global, senao o layout da cidade mudaria inteiro. */
 function makeWindowTexture() {
-  const w = 128, h = 256;
+  const w = 128, h = 512;
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#070b13';
+  let seed = 0x9e3779b9;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  ctx.fillStyle = '#0c1320';
   ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(255,255,255,0.045)';
+  for (let y = 0; y < h - 28; y += 16) ctx.fillRect(0, y, w, 1); // faixa de andar
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let x = 5; x < w; x += 16) ctx.fillRect(x, 0, 5, h - 28); // pilastra
   const warm = ['#ffd9a0', '#ffc46b', '#fff2cc'];
   const cool = ['#9fd8ff', '#7fb8ff', '#c8ecff'];
-  for (let y = 8; y < h - 10; y += 16) {
-    for (let x = 8; x < w - 8; x += 14) {
-      if (rand() > 0.52) {
-        const pal = rand() > 0.45 ? warm : cool;
-        ctx.fillStyle = pal[Math.floor(rand() * pal.length)];
-        ctx.globalAlpha = 0.55 + rand() * 0.45;
-        ctx.fillRect(x, y, 7, 9);
+  for (let y = 6; y < h - 34; y += 14) {
+    for (let x = 6; x < w - 8; x += 11) {
+      const r = rnd();
+      if (r > 0.55) {
+        const pal = rnd() > 0.45 ? warm : cool;
+        ctx.fillStyle = pal[Math.floor(rnd() * pal.length)];
+        ctx.globalAlpha = 0.5 + rnd() * 0.5;
+        ctx.fillRect(x, y, 6, 8);
+      } else if (r > 0.34) {
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#17253c'; // janela apagada: a grade continua legivel
+        ctx.fillRect(x, y, 6, 8);
       }
     }
   }
   ctx.globalAlpha = 1;
+  // terreo: vitrine mais clara + porta central + luminarias
+  ctx.fillStyle = '#1b2c44';
+  ctx.fillRect(0, h - 28, w, 28);
+  ctx.fillStyle = '#3a5f8a';
+  ctx.fillRect(w / 2 - 5, h - 24, 10, 24);
+  for (let i = 0; i < 4; i++) {
+    ctx.fillStyle = i % 2 ? '#ffd9a0' : '#9fd8ff';
+    ctx.fillRect(6 + i * 30, h - 21, 17, 11);
+  }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
   return tex;
 }
 const windowTextures = Array.from({ length: 5 }, makeWindowTexture);
@@ -1051,23 +1080,41 @@ const LOOP_NEED_V = Math.sqrt(2 * 26 * (2 * LOOP.R)) * 0.98;
 const wrapPi = (a) => a - Math.round(a / (Math.PI * 2)) * Math.PI * 2;
 {
   const cy = LOOP.R; // centro do laco: o ponto de baixo encosta no chao (y=0)
+  /* Textura do laço: o CanvasTexture tem x = DIRECAO DA VOLTA (u) e y =
+     LARGURA DA PISTA (v, 9m). Antes eram 40 travessas quase pretas (#141c2c)
+     em volta do tubo — de dentro pareciam "listras pretas" e de fora ficavam
+     visíveis na casca. Agora e asfalto com faixa central tracejada e linhas
+     de borda claras: pista de corrida, nao tabuleiro de xadrez. */
   const stripes = document.createElement('canvas');
-  stripes.width = 128; stripes.height = 128;
+  stripes.width = 256; stripes.height = 160;
   const sctx = stripes.getContext('2d');
-  sctx.fillStyle = '#141c2c';
-  sctx.fillRect(0, 0, 128, 128);
-  sctx.fillStyle = '#ffb300';
-  for (let i = 0; i < 4; i++) sctx.fillRect(i * 32, 0, 12, 128);
+  const grad = sctx.createLinearGradient(0, 0, 0, 160);
+  grad.addColorStop(0, '#2a3650');
+  grad.addColorStop(1, '#1b2436');
+  sctx.fillStyle = grad;
+  sctx.fillRect(0, 0, 256, 160);
+  // costuras transversais discretas (asfalto, nao listra)
+  sctx.fillStyle = 'rgba(0,0,0,0.16)';
+  for (let i = 0; i < 8; i++) sctx.fillRect(i * 32, 0, 2, 160);
+  // linhas de borda da pista (claras, quase emissivas)
+  sctx.fillStyle = '#dfe9f5';
+  sctx.fillRect(0, 14, 256, 7);
+  sctx.fillRect(0, 139, 256, 7);
+  // faixa central tracejada
+  sctx.fillStyle = '#ffc23a';
+  for (let i = 0; i < 4; i++) sctx.fillRect(i * 64 + 10, 76, 44, 9);
   const stripeTex = new THREE.CanvasTexture(stripes);
   stripeTex.colorSpace = THREE.SRGBColorSpace;
   stripeTex.wrapS = stripeTex.wrapT = THREE.RepeatWrapping;
-  stripeTex.repeat.set(10, 1);
+  stripeTex.repeat.set(6, 1);
   stripeTex.anisotropy = 8;
 
   // faixas viram emissiveMap: o tubo brilha por si mesmo (a textura acende).
   // polygonOffset evita o z-fighting do fundo do tubo com o chao (os dois ficam
   // em y=0, onde o laco encosta no piso)
-  const tubeMat = new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.5, metalness: 0.35, emissiveMap: stripeTex, emissive: 0xffffff, emissiveIntensity: 0.2, envMapIntensity: 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  // BackSide: a face listrada e o PISO do laco (o carro roda nela por dentro).
+  // De fora quem manda e a casca solida criada mais abaixo.
+  const tubeMat = new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.62, metalness: 0.22, emissiveMap: stripeTex, emissive: 0xffffff, emissiveIntensity: 0.45, envMapIntensity: 0.9, side: THREE.BackSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   /* O tubo é uma calota com DUAS JANELAS: o arco superior (de boca a boca)
      + a "tigela" do fundo onde o piso toca o chao. As janelas inferiores sao
      exatamente por onde a pista de ENTRADA (sul) e a de SAIDA (norte)
@@ -1120,6 +1167,44 @@ const wrapPi = (a) => a - Math.round(a / (Math.PI * 2)) * Math.PI * 2;
   // setas no chao da pista de entrada (altura acompanha o deck)
   const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffb300, toneMapped: false, transparent: true, opacity: 0.85 });
   const railMat = new THREE.MeshStandardMaterial({ color: 0xff8c1a, roughness: 0.5, metalness: 0.4, emissive: 0xff8c1a, emissiveIntensity: 0.55 });
+  /* --- CASCA EXTERNA + PAREDES INTERNAS -------------------------------
+     O tubo JA e a parede (o carro roda na face interna). Mas faltava tudo
+     que faz "parede" existir na tela: casca solida por fora (sem ela via-se
+     a textura listrada do lado de fora — as "linhas pretas"), guard-rails
+     nas duas arestas e fita de luz neon rente a elas. Agora, de dentro, o
+     laco tem trilho dos dois lados; de fora, e um tubo fechado. */
+  const shellMat = new THREE.MeshStandardMaterial({ color: 0x111c2c, roughness: 0.36, metalness: 0.74, envMapIntensity: 1.15 });
+  const stripMat = new THREE.MeshStandardMaterial({ color: 0xbff6ff, emissive: 0x35e0ff, emissiveIntensity: 2.4, toneMapped: false });
+  {
+    // casca: mesmos arcos (arco superior + tigela), 0,45m maior e 0,6m mais larga
+    const shellArc = (start, len) => {
+      const g = new THREE.CylinderGeometry(LOOP.R + 0.45, LOOP.R + 0.45, LOOP.W + 0.6, 44, 1, true, start, len);
+      g.rotateZ(Math.PI / 2);
+      return g;
+    };
+    for (const g of [new THREE.Mesh(shellArc(0, Math.PI), shellMat), new THREE.Mesh(shellArc(Math.PI * 4 / 3, Math.PI / 3), shellMat)]) {
+      g.position.set(LOOP.x, cy, LOOP.z);
+      g.castShadow = true;
+      g.receiveShadow = true;
+      scene.add(g);
+    }
+    // guard-rails (raio MENOR = "para cima" de dentro do tubo) + fita de luz
+    const bowlShift = Math.PI * 4 / 3;
+    const railTop = new THREE.TorusGeometry(LOOP.R - 0.62, 0.09, 6, 56, Math.PI);
+    const railBowl = new THREE.TorusGeometry(LOOP.R - 0.62, 0.09, 6, 22, Math.PI / 3);
+    railBowl.rotateZ(bowlShift);
+    const stripTop = new THREE.TorusGeometry(LOOP.R - 1.45, 0.06, 5, 56, Math.PI);
+    const stripBowl = new THREE.TorusGeometry(LOOP.R - 1.45, 0.06, 5, 22, Math.PI / 3);
+    stripBowl.rotateZ(bowlShift);
+    for (const sx of [-1, 1]) {
+      for (const [g, mat] of [[railTop, railMat], [railBowl, railMat], [stripTop, stripMat], [stripBowl, stripMat]]) {
+        const m = new THREE.Mesh(g, mat);
+        m.rotation.y = Math.PI / 2;
+        m.position.set(LOOP.x + sx * (LOOP.W / 2 - (mat === railMat ? 0.22 : 0.5)), cy, LOOP.z);
+        scene.add(m);
+      }
+    }
+  }
   for (let k = 0; k < 3; k++) {
     const az = LOOP.z - 9 - k * 4;
     const arr = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2.6, 3), arrowMat);
@@ -1521,7 +1606,11 @@ function makeBanner(repo, index) {
 
 const pads = [];
 REPOS.forEach((repo, i) => {
-  const [x, z] = PAD_POS[i];
+  let [x, z] = PAD_POS[i];
+  // O cartao de repo tem 14m: se cair no corredor do laco ele tapa a pista de
+  // entrada/saida (foi o que escondeu a boca do laco na primeira passagem).
+  // Qualquer pad alinhado com o tubo e empurrado para fora do corredor.
+  if (Math.abs(x - LOOP.x) < 18 && z > -74 && z < 84) x = x <= LOOP.x ? LOOP.x - 44 : LOOP.x + 44;
   const group = new THREE.Group();
   group.position.set(x, 0, z);
   const disc = new THREE.Mesh(
@@ -1577,6 +1666,7 @@ const PHASES = [
   },
   {
     id: 'p6', name: 'LACO INFINITO', type: 'loop', x: 36, z: 4, radius: 8, color: 0xffb300,
+    bannerY: 13.5, bannerScale: 9,
     unlock: 6000, time: 60, goal: 8, reward: 2200,
     desc: 'Reaproveita as orbes do looping: entre pela ENTRADA e traga as 8 orbes antes do tempo (no dificil sao 10 — precisa de duas voltas).'
   },
@@ -1770,8 +1860,11 @@ PHASES.forEach((def, i) => {
   btex.colorSpace = THREE.SRGBColorSpace;
   btex.anisotropy = 8;
   const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: btex, transparent: true, depthWrite: false, toneMapped: false, opacity: 0.9 }));
-  banner.scale.set(15, 5.6, 1);
-  banner.position.y = 8.4;
+  // p6 (LACO INFINITO) fica na boca do laco: o cartao padrao de 15m tapava a
+  // pista de entrada. La o banner sobe e encolhe (def.bannerY/bannerScale).
+  const bScale = def.bannerScale || 15;
+  banner.scale.set(bScale, bScale * 0.373, 1);
+  banner.position.y = def.bannerY || 8.4;
   group.add(banner);
 
   scene.add(group);
@@ -2389,6 +2482,43 @@ bumper.position.set(0, 0.38, 2.0);
 bumper.castShadow = true;
 carBody.add(bumper);
 
+/* --- Detalhes que aparecem NA CAMERA DE CORRIDA (o jogador so ve o carro por
+   tras): faixa central no capo/teto/traseira, barra de freio de largura total,
+   difusor com aletas, escapes e retrovisores. Sem isso o carro lia como uma
+   "caixa azul" de longe. --- */
+const stripeMat = new THREE.MeshStandardMaterial({ color: 0xf2f8ff, roughness: 0.25, metalness: 0.2, envMapIntensity: 1.4 });
+for (const [sz, sy, sl] of [[1.38, 0.885, 1.05], [-0.24, 1.415, 1.3], [-1.5, 0.885, 0.72]]) {
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.02, sl), stripeMat);
+  stripe.position.set(0, sy, sz);
+  carBody.add(stripe);
+}
+const brakeBarMat = new THREE.MeshStandardMaterial({ color: 0xff2d55, emissive: 0xff2d55, emissiveIntensity: 2.6, toneMapped: false });
+const brakeBar = new THREE.Mesh(new THREE.BoxGeometry(1.46, 0.07, 0.06), brakeBarMat);
+brakeBar.position.set(0, 0.95, -1.95);
+carBody.add(brakeBar);
+const diffuser = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 0.32), paintDark);
+diffuser.position.set(0, 0.32, -1.86);
+carBody.add(diffuser);
+for (const fx of [-0.5, -0.18, 0.18, 0.5]) {
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.3), trim);
+  fin.position.set(fx, 0.32, -1.86);
+  carBody.add(fin);
+}
+for (const ex of [-0.52, 0.52]) {
+  const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.24, 10), rimMat);
+  pipe.rotation.x = Math.PI / 2;
+  pipe.position.set(ex, 0.36, -1.99);
+  carBody.add(pipe);
+}
+for (const mx of [-1, 1]) {
+  const stalk = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.04, 0.05), trim);
+  stalk.position.set(mx * 0.92, 1.14, 0.52);
+  carBody.add(stalk);
+  const mirror = new THREE.Mesh(new RoundedBoxGeometry(0.09, 0.13, 0.17, 2, 0.03), paintDark);
+  mirror.position.set(mx * 1.03, 1.16, 0.52);
+  carBody.add(mirror);
+}
+
 // aro com 5 raios escuros sobre o disco claro + tampao luminoso no centro
 const spokeGeo = new THREE.BoxGeometry(0.05, 0.2, 0.055);
 const rimCapMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, toneMapped: false });
@@ -2483,18 +2613,20 @@ headlight.target.position.set(0, 0, 24);
 carBody.add(headlight);
 carBody.add(headlight.target);
 // farol volumétrico (cabo transparente) + luz do nitro (só desktop: LOW_END
-// economiza cada luz extra)
+// economiza cada luz extra). O cone e curto e bem apagado: com 15m x 4,4m em
+// opacidade 0,07 ele virava uma "tenda" creme a frente do carro (o "funil com
+// sombra" que denunciaram). Agora e so um brilho sutil no chao.
 let headlightCone = null, nitroLight = null;
 if (!LOW_END) {
   headlightCone = new THREE.Mesh(
-    new THREE.ConeGeometry(2.2, 15, 20, 1, true),
+    new THREE.ConeGeometry(1.25, 8, 18, 1, true),
     new THREE.MeshBasicMaterial({
-      color: 0xfff2d0, transparent: true, opacity: 0.07, side: THREE.DoubleSide,
+      color: 0xfff2d0, transparent: true, opacity: 0.028, side: THREE.DoubleSide,
       depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false
     })
   );
   headlightCone.rotation.x = Math.PI / 2;
-  headlightCone.position.set(0, 0.8, 9.6);
+  headlightCone.position.set(0, 0.55, 5.2);
   carBody.add(headlightCone);
   nitroLight = new THREE.PointLight(0x66ccff, 0, 12, 2);
   nitroLight.position.set(0, 0.7, -2.4);
@@ -3701,22 +3833,22 @@ const totalEl = document.getElementById('total');
 const wayArrowMesh = new THREE.Group();
 {
   const shaft = new THREE.Mesh(
-    new THREE.BoxGeometry(0.26, 0.1, 0.95),
-    new THREE.MeshBasicMaterial({ color: 0x35c4ff, transparent: true, opacity: 0.9, toneMapped: false, depthWrite: false })
+    new THREE.BoxGeometry(0.2, 0.08, 0.7),
+    new THREE.MeshBasicMaterial({ color: 0x35c4ff, transparent: true, opacity: 0.75, toneMapped: false, depthWrite: false })
   );
-  shaft.position.z = 0.15;
+  shaft.position.z = 0.1;
   const head = new THREE.Mesh(
-    new THREE.ConeGeometry(0.4, 0.85, 4),
-    new THREE.MeshBasicMaterial({ color: 0x35c4ff, transparent: true, opacity: 0.95, toneMapped: false, depthWrite: false })
+    new THREE.ConeGeometry(0.3, 0.62, 4),
+    new THREE.MeshBasicMaterial({ color: 0x35c4ff, transparent: true, opacity: 0.85, toneMapped: false, depthWrite: false })
   );
   head.rotation.x = Math.PI / 2; // cone aponta para +z (a frente da seta)
-  head.position.z = 0.9;
+  head.position.z = 0.66;
   const base = new THREE.Mesh(
-    new THREE.RingGeometry(0.55, 0.8, 24),
-    new THREE.MeshBasicMaterial({ color: 0x35c4ff, transparent: true, opacity: 0.35, toneMapped: false, depthWrite: false, side: THREE.DoubleSide })
+    new THREE.RingGeometry(0.4, 0.58, 24),
+    new THREE.MeshBasicMaterial({ color: 0x35c4ff, transparent: true, opacity: 0.22, toneMapped: false, depthWrite: false, side: THREE.DoubleSide })
   );
   base.rotation.x = -Math.PI / 2;
-  base.position.y = -0.75;
+  base.position.y = -0.55;
   wayArrowMesh.add(shaft, head, base);
 }
 wayArrowMesh.visible = false;
@@ -4715,17 +4847,17 @@ function present(dt) {
     let rel = Math.atan2(wdx, wdz) - state.heading;
     rel = Math.atan2(Math.sin(rel), Math.cos(rel));
     wayDist.textContent = Math.round(Math.hypot(wdx, wdz)) + ' m';
-    // holograma 3D: flutua ~6m a frente do carro, aponta o destino e respira
+    // holograma 3D: flutua ~7m a frente do carro, aponta o destino e respira
     wayArrowBob += dt;
     const bob = REDUCED_MOTION ? 0 : Math.sin(wayArrowBob * 3.2) * 0.16;
     wayArrowMesh.position.set(
-      car.position.x + Math.sin(state.heading) * 6,
-      state.y + 2.05 + bob,
-      car.position.z + Math.cos(state.heading) * 6
+      car.position.x + Math.sin(state.heading) * 7,
+      state.y + 2.45 + bob,
+      car.position.z + Math.cos(state.heading) * 7
     );
     wayArrowMesh.rotation.y = state.heading + rel;
     wayArrowMesh.rotation.x = -state.slope * 0.5;
-    wayArrowMesh.scale.setScalar(REDUCED_MOTION ? 1 : 0.92 + Math.sin(wayArrowBob * 5.1) * 0.08);
+    wayArrowMesh.scale.setScalar(REDUCED_MOTION ? 0.62 : 0.6 + Math.sin(wayArrowBob * 5.1) * 0.06);
     wayArrowMesh.visible = true;
   } else if (wayArrowMesh.visible) {
     wayArrowMesh.visible = false;
