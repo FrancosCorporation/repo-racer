@@ -1849,21 +1849,55 @@ const ENEMY_SPEED = { stalk: 22, telegraph: 4, charge: 38, recover: 2 };
 function chaseAggr() {
   return phaseState.active && phaseState.def && phaseState.def.type === 'chase' && DIFFS[phaseState.diff] ? DIFFS[phaseState.diff].mult : 1;
 }
+/* E2: sprite "!" avisa o telegrafo (leitura de intenção do rival) */
+const alertTex = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = '#fff';
+  x.font = 'bold 52px monospace';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.shadowColor = '#ff2d55'; x.shadowBlur = 12;
+  x.fillText('!', 32, 34);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
 function makeEnemyCar() {
   const g = makeTrafficCar(0xff2d55);
   const stripe = new THREE.Mesh(
     new THREE.BoxGeometry(1.84, 0.12, 3.3),
-    new THREE.MeshStandardMaterial({ color: 0x1a0006, emissive: 0xff2d55, emissiveIntensity: 2.6, toneMapped: false })
+    new THREE.MeshStandardMaterial({ color: 0x1a0006, emissive: 0xff2d55, emissiveIntensity: 3.4, toneMapped: false })
   );
   stripe.position.y = 0.95;
   g.add(stripe);
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: redGlowTex, transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false }));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: redGlowTex, transparent: true, opacity: 0.62, depthWrite: false, toneMapped: false }));
   halo.scale.set(4.4, 4.4, 1);
   halo.position.y = 1.2;
   g.add(halo);
-  const light = new THREE.PointLight(0xff2d55, 3, 18, 2);
-  light.position.y = 1.4;
-  g.add(light);
+  /* B1 (perf): SEM PointLight por rival — 3 a 5 luzes nascendo/morrendo com a
+     horda recompilava os shaders da cena toda (engasgo no spawn). O halo+faixa
+     emissivos ja ancoram o rival neon no escuro, com custo zero por frame. */
+  /* E2: identidade de rival — para-choque com dentes + giroflex girando */
+  const ramBar = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.16, 0.14), trim);
+  ramBar.position.set(0, 0.5, 1.94);
+  g.add(ramBar);
+  for (const tx of [-0.6, 0, 0.6]) {
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.1), rimMat);
+    tooth.position.set(tx, 0.66, 1.96);
+    g.add(tooth);
+  }
+  const beacon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.08),
+    new THREE.MeshBasicMaterial({ color: 0xffb300, toneMapped: false }));
+  beacon.position.set(0, 1.5, 0.1);
+  g.add(beacon);
+  g.userData.beacon = beacon;
+  const alert = new THREE.Sprite(new THREE.SpriteMaterial({ map: alertTex, transparent: true, depthWrite: false, toneMapped: false }));
+  alert.scale.set(1.6, 1.6, 1);
+  alert.position.y = 2.7;
+  alert.visible = false;
+  g.add(alert);
+  g.userData.alert = alert;
   // sombra de contato fake: ancora o rival no chao (o carro do jogador ja tem a sua)
   const blob = new THREE.Mesh(blobGeo, new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, opacity: 0.55, depthWrite: false }));
   blob.scale.setScalar(0.92);
@@ -1886,7 +1920,7 @@ function spawnEnemies(def) {
     mesh.position.set(x, 0, z);
     const heading = a + Math.PI;
     mesh.rotation.y = heading;
-    enemies.push({ mesh, x, z, heading, moveH: heading, speed: 0, hp: phaseState.diff >= 2 ? 4 : 3, mode: 'stalk', modeT: 2.4 + i * 0.8, hitCd: 0, alive: true, lean: 0, flashT: 0, flank: i * 2.4, dir: i % 2 ? 1 : -1, holdT: 0 });
+    enemies.push({ mesh, x, z, heading, moveH: heading, speed: 0, hp: phaseState.diff >= 2 ? 4 : 3, mode: 'stalk', modeT: 2.4 + i * 0.8, hitCd: 0, alive: true, lean: 0, flashT: 0, flank: i * 2.4, dir: i % 2 ? 1 : -1, holdT: 0, role: i === 0 ? 'bloqueador' : 'perseguidor', idx: i, wpT: 0.5 + i * 0.4, stuckT: 0 });
   }
 }
 function clearEnemies() {
@@ -1905,6 +1939,32 @@ function hurtPlayerInPhase() {
   thud();
   toast('RIVAL NA SUA COLA!  -1 VIDA', '#ff5470');
 }
+/* --- C1: navegação pela GRADE DE RUAS (ROADS) — rival/chefão vão de esquina em
+   esquina em vez de sonda local: não atolam nos quarteirões e cortam caminho de
+   verdade pelo asfalto (canto em L: minha rua -> coluna do alvo -> esquina alvo) --- */
+function nearestRoad(v) {
+  let best = ROADS[0], bd = Math.abs(v - ROADS[0]);
+  for (let i = 1; i < ROADS.length; i++) {
+    const d = Math.abs(v - ROADS[i]);
+    if (d < bd) { bd = d; best = ROADS[i]; }
+  }
+  return best;
+}
+function streetPathTo(x, z, tx, tz) {
+  const cx = nearestRoad(x), cz = nearestRoad(z);
+  const txr = nearestRoad(tx), tzr = nearestRoad(tz);
+  const raw = [[cx, cz], [txr, cz], [txr, tzr]];
+  const pts = [];
+  let px = x, pz = z;
+  for (const p of raw) {
+    if (Math.hypot(p[0] - px, p[1] - pz) > 8) { pts.push(p); px = p[0]; pz = p[1]; }
+  }
+  return pts;
+}
+function wpNext(o) {
+  while (o.wp && o.wp.length && Math.hypot(o.wp[0][0] - o.x, o.wp[0][1] - o.z) < 7) o.wp.shift();
+  return o.wp && o.wp.length ? o.wp[0] : null;
+}
 function updateEnemies(dt) {
   for (const e of enemies) {
     if (!e.alive) continue;
@@ -1919,16 +1979,28 @@ function updateEnemies(dt) {
     const cSpd = Math.abs(state.speed);
     const pvx = Math.sin(state.moveH) * cSpd, pvz = Math.cos(state.moveH) * cSpd;
     const closeIn = dist / Math.max(12, ENEMY_SPEED.stalk * aggr);
-    const lead = clamp(closeIn, 0, 2.2);
+    /* C2: papéis — o bloqueador (i=0) corta o caminho e mira ADIANTE do jogador;
+       os perseguidores ficam atrás/colados (lead menor) e flanqueiam */
+    const lead = clamp(closeIn, 0, 2.2) * (e.role === 'bloqueador' ? 1.45 : 0.6);
     let tx = car.position.x + pvx * lead, tz = car.position.z + pvz * lead;
     const want = Math.atan2(tx - e.x, tz - e.z);
     e.modeT -= dt;
     let turn = 1.7, accel = 30;
     if (e.mode === 'stalk') {
-      // flanqueio: todos os rivais miram num ponto deslocado pra um lado
-      e.flank += dt * 0.9 * (e.dir || 1);
-      const fAng = want + clamp(Math.sin(e.flank), -1, 1) * clamp((dist - 8) / 40, 0, 1) * 0.9;
-      e.heading = turnToward(e.heading, fAng, turn, dt);
+      /* C1: rota pela grade recalculada periodicamente (custo O(3)) */
+      e.wpT -= dt;
+      if (e.wpT <= 0) { e.wpT = 1.6 + (e.idx || 0) * 0.15; e.wp = streetPathTo(e.x, e.z, car.position.x, car.position.z); }
+      if (dist > 24) {
+        // longe: segue o asfalto ate a esquina certa (nao atola no quarteirao)
+        const wp = wpNext(e);
+        const wantWp = wp ? Math.atan2(wp[0] - e.x, wp[1] - e.z) : want;
+        e.heading = turnToward(e.heading, wantWp, turn, dt);
+      } else {
+        // perto: flanqueio (todos os rivais miram num ponto deslocado pra um lado)
+        e.flank += dt * 0.9 * (e.dir || 1);
+        const fAng = want + clamp(Math.sin(e.flank), -1, 1) * clamp((dist - 8) / 40, 0, 1) * 0.9;
+        e.heading = turnToward(e.heading, fAng, turn, dt);
+      }
       // cerebro (opcional): o lider da matilha pode escolher a tatica antes de carregar
       if (e.modeT <= 0 && !brainTryDecideEnemy(e)) { e.mode = 'telegraph'; e.modeT = 0.8; tone(660, 0.1, { gain: 0.05 }); }
     } else if (e.mode === 'telegraph') {
@@ -1950,19 +2022,46 @@ function updateEnemies(dt) {
     const target = ENEMY_SPEED[e.mode] * (e.mode === 'stalk' || e.mode === 'charge' ? aggr : 1) * (e.holdT > 0 ? 0.6 : 1);
     e.speed += clamp(target - e.speed, -70 * dt, accel * dt);
     e.moveH = turnToward(e.moveH, e.heading, turn * 0.6, dt);
+    const peX = e.x, peZ = e.z; // B2: referencia p/ medir deslize/atolamento
     e.x += Math.sin(e.moveH) * e.speed * dt;
     e.z += Math.cos(e.moveH) * e.speed * dt;
     if (Math.abs(e.x) > WORLD_BOUND) { e.x = Math.sign(e.x) * WORLD_BOUND; e.speed *= 0.3; }
     if (Math.abs(e.z) > WORLD_BOUND) { e.z = Math.sign(e.z) * WORLD_BOUND; e.speed *= 0.3; }
+    /* B2: colisão com DESLIZE (antes o clamp por eixo grudava no canto) + unstick */
     for (const bl of buildings) {
       const px = e.x - bl.x, pz = e.z - bl.z;
       const ox = 1.6 + bl.w / 2 - Math.abs(px);
       const oz = 2.4 + bl.d / 2 - Math.abs(pz);
       if (ox > 0 && oz > 0) {
-        if (ox < oz) e.x = bl.x + Math.sign(px || 1) * (1.6 + bl.w / 2);
-        else e.z = bl.z + Math.sign(pz || 1) * (2.4 + bl.d / 2);
-        e.speed *= 0.3;
+        if (ox < oz) {
+          e.x = bl.x + Math.sign(px || 1) * (1.6 + bl.w / 2 + 0.02);
+          e.heading += (Math.cos(e.moveH) >= 0 ? 1 : -1) * Math.sign(pz || 1) * Math.min(0.5, 0.14 + ox * 0.4);
+        } else {
+          e.z = bl.z + Math.sign(pz || 1) * (2.4 + bl.d / 2 + 0.02);
+          e.heading += (Math.sin(e.moveH) >= 0 ? -1 : 1) * Math.sign(px || 1) * Math.min(0.5, 0.14 + oz * 0.4);
+        }
+        e.speed *= 0.6;
         break;
+      }
+    }
+    const movedE = Math.hypot(e.x - peX, e.z - peZ);
+    if (e.speed > 4 && movedE < Math.max(0.03, e.speed * dt * 0.3)) e.stuckT = (e.stuckT || 0) + dt;
+    else e.stuckT = 0;
+    if (e.stuckT > 0.9) {
+      e.stuckT = 0;
+      e.heading += Math.PI * 0.7; e.moveH += Math.PI * 0.7;
+      e.speed = Math.min(e.speed, 12);
+      e.mode = 'stalk'; e.modeT = 1.2;
+      spawnSmoke(e.x, e.z);
+    }
+    /* C2: separação boids-lite — a matilha não empilha (custo O(n²) com n<=5) */
+    for (const o of enemies) {
+      if (o === e || !o.alive) continue;
+      const sx = e.x - o.x, sz = e.z - o.z;
+      const sd = Math.hypot(sx, sz);
+      if (sd > 0.001 && sd < 3.4) {
+        e.x += (sx / sd) * (3.4 - sd) * 0.5;
+        e.z += (sz / sd) * (3.4 - sd) * 0.5;
       }
     }
     const hd = Math.atan2(Math.sin(e.heading - e.moveH), Math.cos(e.heading - e.moveH));
@@ -1970,6 +2069,15 @@ function updateEnemies(dt) {
     e.mesh.position.set(e.x, 0, e.z);
     e.mesh.rotation.y = e.heading;
     e.mesh.rotation.z = -e.lean;
+    /* E2/E3: leitura de estado — "!" no telegrafo, giroflex girando e
+       fumaça quando o rival está de um hit (hp <= 1) */
+    const udE = e.mesh.userData;
+    if (udE.alert) udE.alert.visible = e.mode === 'telegraph';
+    if (udE.beacon) udE.beacon.rotation.y += dt * 8;
+    if (e.hp <= 1) {
+      e.dmgT = (e.dmgT || 0) - dt;
+      if (e.dmgT <= 0) { e.dmgT = 0.5; spawnSmoke(e.x, e.z); }
+    }
     const eb = e.mesh.userData.blob;
     if (eb) {
       eb.visible = e.alive;
@@ -2326,6 +2434,49 @@ for (const hx of [-0.62, 0.62]) {
   carBody.add(light);
 }
 
+/* --- E1: kits 3D próprios de cada carro (custo ~0: só ligar/desligar grupos
+   já construídos — NEON linha de corrida, PHANTOM asa dupla, TANK bicho de carga) --- */
+const kitNeon = new THREE.Group();
+const kitPhantom = new THREE.Group();
+const kitTank = new THREE.Group();
+{
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.05, 0.07), underglowMat);
+  bar.position.set(0, 0.76, 1.88);
+  kitNeon.add(bar);
+  for (const sx of [-0.8, 0.8]) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.26, 0.5), paintDark);
+    fin.position.set(sx, 1.16, -1.7);
+    kitNeon.add(fin);
+  }
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(1.96, 0.07, 0.5), paintDark);
+  wing.position.set(0, 1.3, -1.92);
+  wing.castShadow = true;
+  kitPhantom.add(wing);
+  for (const sx of [-0.78, 0.78]) {
+    const sup = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.36, 0.1), trim);
+    sup.position.set(sx, 1.1, -1.9);
+    kitPhantom.add(sup);
+    const intake = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 0.7), trim);
+    intake.position.set(sx * 1.28, 0.5, 0.55);
+    kitPhantom.add(intake);
+  }
+  const rack = new THREE.Mesh(new RoundedBoxGeometry(1.24, 0.2, 1.16, 2, 0.06), paintDark);
+  rack.position.set(0, 1.5, -0.3);
+  rack.castShadow = true;
+  kitTank.add(rack);
+  const barFront = new THREE.Mesh(new THREE.BoxGeometry(1.74, 0.26, 0.14), trim);
+  barFront.position.set(0, 0.56, 2.14);
+  kitTank.add(barFront);
+  for (const sx of [-0.5, 0, 0.5]) {
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, 0.1), rimMat);
+    tooth.position.set(sx, 0.76, 2.14);
+    kitTank.add(tooth);
+  }
+}
+carBody.add(kitNeon, kitPhantom, kitTank);
+kitPhantom.visible = false;
+kitTank.visible = false;
+
 const headlight = new THREE.SpotLight(0xfff2d0, 70, 50, 0.55, 0.45, 1.4);
 headlight.position.set(0, 0.85, 1.9);
 headlight.target.position.set(0, 0, 24);
@@ -2435,11 +2586,14 @@ function makeTrafficCar(color) {
     w.position.set(wx, 0.34, wz);
     group.add(w);
   }
+  /* E4: lanterna POR CARRO (clone do material) — acende quando ele freia */
+  const tailC = tailMat.clone();
+  tailC.emissiveIntensity = 2.2;
   for (const hx of [-0.55, 0.55]) {
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.08), headMat);
     head.position.set(hx, 0.7, 1.82);
     group.add(head);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.08), tailMat);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.08), tailC);
     tail.position.set(hx, 0.7, -1.82);
     group.add(tail);
     // setinhas amarelas piscando nas quinas do carro
@@ -2447,6 +2601,7 @@ function makeTrafficCar(color) {
     blinker.position.set(hx + Math.sign(hx) * 0.28, 0.7, 1.82);
     group.add(blinker);
   }
+  group.userData.tailMat = tailC;
   return group;
 }
 const traffic = [];
@@ -2466,7 +2621,8 @@ for (let i = 0; i < 16; i++) {
     mesh.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
   }
   scene.add(mesh);
-  traffic.push({ mesh, dir, vertical, speed: 11 + rand() * 9 });
+  const base = 11 + rand() * 9;
+  traffic.push({ mesh, dir, vertical, speed: base, base, tail: mesh.userData.tailMat });
 }
 
 const smokeTex = makeRadialTexture('rgba(220, 235, 255, 0.55)', 'rgba(170, 200, 230, 0.22)', 'rgba(150, 180, 220, 0)');
@@ -2593,6 +2749,17 @@ let invulnT = 0;
 let bossHitCd = 0;
 let bossTimer = 0;
 let bossResult = null;
+/* B1 (perf): o SEGV nasce OCULTO no boot e os rivais nao tem PointLight — o
+   jogo NUNCA muda a quantidade de luzes em runtime. No three.js, mudar a
+   contagem de luzes recompila todos os materiais da cena (o "engasgo" no
+   inicio da arena/horda). total de luzes = fixo do primeiro frame. */
+let bossCamperT = 0; // C3: tempo do jogador parado (punição de camper)
+if (!bossMesh) {
+  bossMesh = makeBossMesh();
+  bossMesh.group.visible = false;
+  if (bossMesh.group.userData.blob) bossMesh.group.userData.blob.visible = false;
+  scene.add(bossMesh.group);
+}
 
 function makeBossMesh() {
   const group = new THREE.Group();
@@ -2833,7 +3000,7 @@ function brainApplyToast(quem, motivo) {
 function brainApplyBoss(b, key, motivo) {
   const st = bossStats();
   if (key === 'carga') {
-    b.mode = 'telegraph'; b.modeT = st.telegraphT;
+    b.mode = 'telegraph'; b.modeT = st.telegraphT * (b.rage ? 0.72 : 1);
     tone(880, 0.12, { gain: 0.07 }); tone(880, 0.12, { gain: 0.07, delay: 0.22 });
   } else if (key === 'finta') {
     b.mode = 'telegraph'; b.modeT = st.telegraphT * 0.5; b.feint = 2;
@@ -2977,7 +3144,8 @@ function startBoss() {
     x: sx, z: sz,
     heading: Math.atan2(car.position.x - sx, car.position.z - sz),
     speed: 0, hp: st2.hp, maxHp: st2.hp, mode: 'stalk', modeT: 4,
-    flashT: 0, alive: true, lean: 0, moveH: 0, avoidSide: 0, feint: 0, cutT: 0, cutX: 0, cutZ: 0
+    flashT: 0, alive: true, lean: 0, moveH: 0, avoidSide: 0, feint: 0, cutT: 0, cutX: 0, cutZ: 0,
+    rage: 0, wp: null, wpT: 0, stuckT: 0, trailT: 0, smokeT: 0
   };
   boss.moveH = boss.heading;
   bossMesh.group.visible = true;
@@ -2986,6 +3154,7 @@ function startBoss() {
   playerHp = 3;
   invulnT = 0;
   bossHitCd = 0;
+  bossCamperT = 0; // C3: zera o medidor de camper a cada luta
   bossTimer = BOSS_CFG.time;
   bossResult = null;
   state.bossActive = true;
@@ -3069,6 +3238,20 @@ function bossEnd(win, reason) {
 function updateBoss(dt) {
   const b = boss;
   const st = bossStats();
+  /* C3: FASE 2 — abaixo de 50% o SEGV fica furioso (olho/faixa quentes,
+     telegrafa 28% mais rápido, carga +8%) E punição de camper: >2,5s parado
+     acelera a próxima investida */
+  if (b.maxHp > 0 && b.hp <= b.maxHp * 0.5 && !b.rage) {
+    b.rage = 1;
+    if (bossMesh) {
+      bossMesh.eyeMat.emissive.setHex(0xff8c00);
+      bossMesh.stripeMat.emissive.setHex(0xff8c00);
+    }
+    toast('SEGV FURIOSO!', '#ff8c00');
+    tone(160, 0.45, { type: 'sawtooth', gain: 0.09, freqEnd: 80 });
+  }
+  bossCamperT = Math.abs(state.speed) < 2.5 ? bossCamperT + dt : 0;
+  if (bossCamperT > 2.5 && b.mode === 'stalk' && b.modeT > 0.5) b.modeT = 0.5;
   const dx = car.position.x - b.x, dz = car.position.z - b.z;
   const dist = Math.hypot(dx, dz) || 0.001;
   // persegue o PONTO PARA ONDE voce vai, nao onde esta: fugir em linha reta
@@ -3082,11 +3265,19 @@ function updateBoss(dt) {
   if (b.mode === 'stalk') {
     target = st.stalk;
     b.cutT = Math.max(0, (b.cutT || 0) - dt);
+    /* C1: rota pela grade de ruas (recalculada a cada 1,4s) — o SEGV não atolma
+       mais nos quarteiroes: ele vai de esquina em esquina cortando pelo asfalto */
+    b.wpT = (b.wpT || 0) - dt;
+    if (b.wpT <= 0) { b.wpT = 1.4; b.wp = streetPathTo(b.x, b.z, car.position.x, car.position.z); }
+    const wp = wpNext(b);
     if (b.cutT > 0) {
       // CORTE DE CAMINHO (tática do cerebro): mira o ponto onde voce VAI estar
       const cw = Math.atan2(b.cutX - b.x, b.cutZ - b.z);
       if (!bossAvoid(b, dt)) b.heading = turnToward(b.heading, cw, 2.2, dt);
       target = st.stalk * 1.12;
+    } else if (wp && dist > 26 && !bossAvoid(b, dt)) {
+      // longe: segue a rua ate a esquina certa
+      b.heading = turnToward(b.heading, Math.atan2(wp[0] - b.x, wp[1] - b.z), 1.9, dt);
     } else if (!bossAvoid(b, dt)) {
       b.heading = turnToward(b.heading, want, 1.5, dt);
     }
@@ -3097,7 +3288,7 @@ function updateBoss(dt) {
         b.mode = 'charge'; b.modeT = 1.7; b.heading = Math.atan2(dx, dz);
         tone(220, 0.5, { type: 'sawtooth', gain: 0.08, freqEnd: 660 });
       } else if (!brainTryDecideBoss(b)) {
-        b.mode = 'telegraph'; b.modeT = st.telegraphT;
+        b.mode = 'telegraph'; b.modeT = st.telegraphT * (b.rage ? 0.72 : 1);
         tone(880, 0.12, { gain: 0.07 });
         tone(880, 0.12, { gain: 0.07, delay: 0.22 });
       }
@@ -3118,7 +3309,9 @@ function updateBoss(dt) {
       }
     }
   } else if (b.mode === 'charge') {
-    target = st.charge;
+    target = st.charge * (b.rage ? 1.08 : 1); // C3: furioso investe +8%
+    b.trailT = (b.trailT || 0) - dt;
+    if (b.trailT <= 0) { b.trailT = 0.07; spawnSparks(b.x - Math.sin(b.moveH) * 4.5, b.z - Math.cos(b.moveH) * 4.5, 2); } // E3: rastro de faíscas
     if (b.modeT <= 0) { b.mode = 'recover'; b.modeT = 2.2; }
     else if (dist < 12) {
       // perto demais: curva fechada para tentar acertar — e derrapa
@@ -3138,19 +3331,28 @@ function updateBoss(dt) {
   const turnRateNow = b.mode === 'charge' ? 1.1 : (b.mode === 'telegraph' ? 2.4 : 1.5);
   const bLag = 0.55 + (b.mode === 'charge' ? 0.45 : 0.25);
   b.moveH = turnToward(b.moveH, b.heading, turnRateNow * bLag, dt);
+  const preBX = b.x, preBZ = b.z; // B2: referencia p/ medir deslize/atolamento
   b.x += Math.sin(b.moveH) * b.speed * dt;
   b.z += Math.cos(b.moveH) * b.speed * dt;
   if (Math.abs(b.x) > WORLD_BOUND) { b.x = Math.sign(b.x) * WORLD_BOUND; b.speed *= 0.3; }
   if (Math.abs(b.z) > WORLD_BOUND) { b.z = Math.sign(b.z) * WORLD_BOUND; b.speed *= 0.3; }
+  /* B2: colisão com DESLIZE — empurra pela face de menor penetracao com um
+     nudge tangencial (antes o clamp por eixo + speed*0.25 TRAVAVA ele no canto,
+     o "travando" relatado) + unstick se ainda atolar por 0,9s */
   const halfW = 3.0, halfD = 5.6;
   for (const bl of buildings) {
     const px = b.x - bl.x, pz = b.z - bl.z;
     const ox = halfW + bl.w / 2 - Math.abs(px);
     const oz = halfD + bl.d / 2 - Math.abs(pz);
     if (ox > 0 && oz > 0) {
-      if (ox < oz) b.x = bl.x + Math.sign(px || 1) * (halfW + bl.w / 2);
-      else b.z = bl.z + Math.sign(pz || 1) * (halfD + bl.d / 2);
-      b.speed *= 0.25;
+      if (ox < oz) {
+        b.x = bl.x + Math.sign(px || 1) * (halfW + bl.w / 2 + 0.02);
+        b.heading += (Math.cos(b.moveH) >= 0 ? 1 : -1) * Math.sign(pz || 1) * Math.min(0.55, 0.16 + ox * 0.4);
+      } else {
+        b.z = bl.z + Math.sign(pz || 1) * (halfD + bl.d / 2 + 0.02);
+        b.heading += (Math.sin(b.moveH) >= 0 ? -1 : 1) * Math.sign(px || 1) * Math.min(0.55, 0.16 + oz * 0.4);
+      }
+      b.speed *= 0.7; // raspão perde menos (era 0.25 = parada seca)
       if (b.mode === 'charge') {
         b.mode = 'recover';
         b.modeT = 2.4;
@@ -3160,6 +3362,17 @@ function updateBoss(dt) {
       }
       break;
     }
+  }
+  const movedB = Math.hypot(b.x - preBX, b.z - preBZ);
+  if (b.speed > 4 && movedB < Math.max(0.03, b.speed * dt * 0.3)) b.stuckT = (b.stuckT || 0) + dt;
+  else b.stuckT = 0;
+  if (b.stuckT > 0.9) {
+    b.stuckT = 0;
+    b.heading += Math.PI * 0.7; b.moveH += Math.PI * 0.7;
+    b.speed = Math.min(b.speed, 12);
+    b.mode = 'stalk'; b.modeT = 1.2;
+    spawnSmoke(b.x, b.z);
+    toast('SEGV MANOBRA!', '#ff8c42');
   }
   if (dist < BOSS_CFG.contact && bossHitCd <= 0) {
     bossHitCd = 0.6;
@@ -3192,6 +3405,10 @@ function updateBoss(dt) {
   const pulse = b.mode === 'telegraph' ? 2 + Math.abs(Math.sin(performance.now() * 0.02)) * 6
     : b.mode === 'charge' ? 7
     : b.mode === 'recover' ? 0.6 : 3;
+  if (b.hp < b.maxHp * 0.35) { // E3: dano visível — SEGV fumaça quando vai pro chão
+    b.smokeT = (b.smokeT || 0) - dt;
+    if (b.smokeT <= 0) { b.smokeT = 0.35; spawnSmoke(b.x + (rand() - 0.5) * 3, b.z + (rand() - 0.5) * 5); }
+  }
   m.eyeMat.emissiveIntensity = b.flashT > 0 ? 9 : pulse;
   m.stripeMat.emissiveIntensity = b.flashT > 0 ? 9 : (b.mode === 'recover' ? 0.8 : 2.4);
   if (m.group.userData.blob) {
@@ -3405,6 +3622,10 @@ function applyCarChoice() {
   stats.accel = c.accel;
   stats.max = c.max;
   stats.grip = c.grip;
+  // E1: identidade 3D própria de cada carro (mesma carroceria, kits distintos)
+  kitNeon.visible = selectedCar === 0;
+  kitPhantom.visible = selectedCar === 1;
+  kitTank.visible = selectedCar === 2;
 }
 
 function startGame() {
@@ -3706,8 +3927,37 @@ if (!LOW_END) {
 }
 composer.addPass(new OutputPass());
 
+/* B3: qualidade adaptativa — frame pesado (>24ms) por ~2s desce um degrau
+   (SMAA -> pixel ratio -> bloom+cone); sobrou quadro por 6s, sobe de volta.
+   Um degrau por vez, com toast: acaba com o "lag" mesmo em GPU fraca. */
+let qLevel = 0, qHeavyT = 0, qLightT = 0, qToastT = 0;
+function applyQuality() {
+  if (smaa) smaa.enabled = qLevel === 0;
+  const wantPR = qLevel >= 2 ? 1 : Math.min(window.devicePixelRatio, LOW_END ? 1.25 : 1.8);
+  renderer.setPixelRatio(wantPR);
+  composer.setPixelRatio(wantPR);
+  composer.setSize(window.innerWidth, window.innerHeight);
+  bloom.strength = qLevel >= 2 ? 0.5 : (LOW_END ? 0.6 : 0.72);
+  if (headlightCone) headlightCone.visible = qLevel < 2;
+}
+function adaptQuality(frameDt) {
+  if (frameDt > 0.024) { qHeavyT += frameDt; qLightT = 0; }
+  else if (frameDt < 0.015) { qLightT += frameDt; qHeavyT = 0; }
+  else { qHeavyT = Math.max(0, qHeavyT - frameDt); }
+  const now = performance.now();
+  if (qHeavyT > 2 && qLevel < 2) {
+    qLevel++; qHeavyT = 0;
+    applyQuality();
+    if (now - qToastT > 8000) { qToastT = now; toast('QUALIDADE AJUSTADA', '#7ef0ff'); }
+  } else if (qLightT > 6 && qLevel > 0) {
+    qLevel--; qLightT = 0;
+    applyQuality();
+  }
+}
+
 const clock = new THREE.Clock();
 const camOffset = new THREE.Vector3(0, 6.8, -14);
+const UP_AXIS = new THREE.Vector3(0, 1, 0); // B4: reuso (antes new Vector3/quadro)
 const tmpVec = new THREE.Vector3();
 const tmpVec2 = new THREE.Vector3();
 let prevSpeed = 0;
@@ -4169,6 +4419,15 @@ function update(dt) {
   }
 
   for (const t of traffic) {
+    /* E4: freio de verdade — jogador na frente aliado na rua, o carro reduz e
+       a lanterna (material próprio) acende forte */
+    const pdx = car.position.x - t.mesh.position.x, pdz = car.position.z - t.mesh.position.z;
+    const ahead = (t.vertical ? pdz : pdx) * t.dir;
+    const lat = t.vertical ? Math.abs(pdx) : Math.abs(pdz);
+    const braked = state.y < 2.2 && ahead > 0 && ahead < 11 && lat < 2.6;
+    const wantT = braked ? 4.5 : t.base;
+    t.speed += clamp(wantT - t.speed, -24 * dt, 12 * dt);
+    if (t.tail) t.tail.emissiveIntensity = braked ? 6 : 2.2;
     if (t.vertical) t.mesh.position.z += t.dir * t.speed * dt;
     else t.mesh.position.x += t.dir * t.speed * dt;
     if (t.mesh.position.z > 230) t.mesh.position.z = -230;
@@ -4428,7 +4687,7 @@ function present(dt) {
   camera.updateProjectionMatrix();
 
   if (!shotMode) {
-    tmpVec.copy(camOffset).applyAxisAngle(new THREE.Vector3(0, 1, 0), state.heading).add(car.position);
+    tmpVec.copy(camOffset).applyAxisAngle(UP_AXIS, state.heading).add(car.position);
     camera.position.lerp(tmpVec, 1 - Math.pow(0.0015, dt));
     tmpVec2.set(
       car.position.x + Math.sin(state.heading) * 7,
@@ -4500,7 +4759,8 @@ function present(dt) {
   if (state.bossActive && boss) {
     bossHpEl.style.width = Math.round((boss.hp / (boss.maxHp || BOSS_CFG.hp)) * 100) + '%';
     bossHpTxtEl.textContent = Math.ceil(boss.hp) + '/' + (boss.maxHp || BOSS_CFG.hp);
-    bossHeartsEl.textContent = '♥'.repeat(playerHp) + '♡'.repeat(Math.max(0, 3 - playerHp));
+    const heartsTxt = '♥'.repeat(playerHp) + '♡'.repeat(Math.max(0, 3 - playerHp));
+    if (bossHeartsEl.textContent !== heartsTxt) bossHeartsEl.textContent = heartsTxt; // B4: DOM so quando muda
     const bt = Math.max(0, Math.ceil(bossTimer));
     bossTimeEl.textContent = Math.floor(bt / 60) + ':' + String(bt % 60).padStart(2, '0');
   }
@@ -4546,6 +4806,7 @@ let accumulator = 0;
 
 renderer.setAnimationLoop(() => {
   const frameDt = Math.min(clock.getDelta(), 0.05);
+  adaptQuality(frameDt); // B3: mede e ajusta a qualidade em tempo real
   accumulator = Math.min(accumulator + frameDt, 0.25);
   let steps = 0;
   while (accumulator >= FIXED_DT && steps < MAX_STEPS) {
@@ -4707,6 +4968,15 @@ if (params.has('debug')) {
       enable: (on) => { brain.enabled = !!on && !!brain.engine; brainSave(); brainPaint(); return brain.enabled; },
       test: (n) => brainSelfTest(n),
       _brain: brain, // escape hatch de teste (fallback com motor falso, inspeção)
+    },
+    // validação das fases B/E: qualidade adaptativa, kits e trânsito
+    perf: () => ({ q: qLevel, pr: renderer.getPixelRatio(), bloom: +bloom.strength.toFixed(2), smaa: !!(smaa && smaa.enabled) }),
+    adaptN: (n) => { for (let i = 0; i < (n || 1); i++) adaptQuality(0.05); return qLevel; },
+    kits: () => [kitNeon.visible, kitPhantom.visible, kitTank.visible],
+    lights: () => {
+      let n = 0;
+      scene.traverse((o) => { if (o.isLight) n++; });
+      return n;
     },
     step: (n = 1) => { for (let i = 0; i < n; i++) { update(FIXED_DT); present(FIXED_DT); } },
   };
