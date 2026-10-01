@@ -69,6 +69,14 @@ aquecimento, circuito de portais, zona de drift, caçada, o laço infinito e o c
 - **Chefão final: SEGV** — complete os 13 repos e libere o duelo no botão
   "ENFRENTAR O CHEFÃO": telegrafa, carga e janela de vulnerabilidade, 3
   corações contra 100 de vida em 90 s (atalho: `?boss=1`)
+- **🧠 Cérebro LLM local (opcional)** — rivais e SEGV podem pensar com um
+  **modelo de linguagem rodando dentro do navegador** (WebLLM/WebGPU, **sem
+  servidor e sem API**): o botão `CÉREBRO DOS INIMIGOS` no menu carrega o
+  **SmolLM2 360M** (menor modelo validado — download único que fica no cache)
+  ou o **Qwen2.5 0.5B**. O modelo escolhe entre táticas já avaliadas (carga,
+  finta, corte de caminho, recuo, flanquear, segurar) e responde JSON validado,
+  com retry e **fallback heurístico** (o jogo nunca trava); o "motivo" da jogada
+  aparece em toast. Números do teste real em `MELHORIAS-3D-E-IA.md`
 - **Derrapagem lateral de verdade** — física com trajetória atrasada: a traseira
   escapa para o lado com inércia e atrito (não só visual), o carro perde
   velocidade no deslize e o chefão SEGV também derrapa fechando curva
@@ -227,6 +235,9 @@ https://francoscorporation.github.io/repo-racer/
 
 - **Three.js** (r160, via CDN) — cena, luzes com sombras, reflexos (IBL),
   sprites, pós-processamento (bloom + vinheta/CA + **SMAA**)
+- **WebLLM 0.2.85** (via CDN) — cérebro LLM opcional 100% no navegador (WebGPU);
+  pesos do SmolLM2-360M / Qwen2.5-0.5B baixados uma vez do Hugging Face e
+  cacheados (depois do 1º download, roda offline)
 - **WebAudio** — som do motor e dos pneus gerado em tempo real
 - **HTML/CSS/JS puro** — sem build, sem dependências instaladas
 - **Debugar fácil**: com `?debug=1` o console ganha `window.__rr` para dirigir a
@@ -235,7 +246,8 @@ https://francoscorporation.github.io/repo-racer/
   `damageBoss`, `hurtPlayer`, `bossEnd`, `resetScore`, `resetProgress`, `keys`,
   `traffic`, `buildings`, `sparksCount`, `bumperDent`, `puddles`, `windowGlow`,
   `bossBlob`, `blinkerMat`, `loopCoins`, `loopBoostPads`, `wayArrowMesh`,
-  `pads`, `resetCrash`, `instancedCounts`, `antennaCount`)
+  `pads`, `resetCrash`, `instancedCounts`, `antennaCount`,
+  `llm` (`load`, `status`, `enable`, `test`, `_brain`))
 - **GitHub Pages** — hospedagem estática
 
 ## Rodar localmente
@@ -250,6 +262,7 @@ python3 -m http.server 8080
 ```
 index.html            # o jogo inteiro (cena, física arcade, áudio, HUD, controles)
 MELHORIAS-LOOPING.md  # verificação do looping: diagnóstico, correções, validação
+MELHORIAS-3D-E-IA.md  # verificação de 3D/IA: rivais, SEGV, cérebro LLM local + testes
 preview.png           # screenshot usado no README
 Dockerfile            # nginx:alpine servindo os estáticos (sem build de app)
 docker-compose.yml    # atalho: docker compose up --build na porta 8080
