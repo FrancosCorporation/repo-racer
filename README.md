@@ -69,6 +69,20 @@ aquecimento, circuito de portais, zona de drift, caçada, o laço infinito e o c
 - **Chefão final: SEGV** — complete os 13 repos e libere o duelo no botão
   "ENFRENTAR O CHEFÃO": telegrafa, carga e janela de vulnerabilidade, 3
   corações contra 100 de vida em 90 s (atalho: `?boss=1`)
+- **Rivais e SEGV com IA de verdade** — navegam pela **grade de ruas** (waypoints
+  de esquina em esquina: não atolam nos quarteirões e cortam caminho pelo
+  asfalto), os rivais têm **papéis** (um bloqueia à frente, os outros perseguem
+  e flanqueiam) e **separação** (a matilha não empilha); o SEGV ganhou **fase
+  furiosa** abaixo de 50% de vida (olho âmbar, telegrafa mais rápido, carga +8%)
+  e **pune quem fica parado**; colisão com **deslize + unstick** — acabou o
+  "travando" do chefão
+- **Leitura visual de intenção** — o rival exibe **"!"** antes do bote, giroflex
+  girando e fumaça quando está de um hit; o SEGV solta **faíscas na carga** e
+  **fumaça** quando vai pro chão; o trânsito tem **lanternas de freio de verdade**
+  (reduz com você ali na frente e acende as luzes)
+- **Garagem com identidade 3D** — além da cor e da dirigibilidade, cada carro tem
+  **kit próprio**: NEON com linha de corrida e aletas, PHANTOM com **asa dupla** e
+  entradas laterais, TANK com **rack de teto e para-choque** reforçado
 - **🧠 Cérebro LLM local (opcional)** — rivais e SEGV podem pensar com um
   **modelo de linguagem rodando dentro do navegador** (WebLLM/WebGPU, **sem
   servidor e sem API**): o botão `CÉREBRO DOS INIMIGOS` no menu carrega o
@@ -143,7 +157,9 @@ aquecimento, circuito de portais, zona de drift, caçada, o laço infinito e o c
 - **HUD** com velocidade, nitro, pontos/combo, progresso e painel do repositório
 - **Controles de toque** para celular (com botão DERRAPA) e **suporte a
   gamepad** (analógico + botões)
-- **Qualidade adaptativa**: detecta mobile/GPU fraca e reduz sombras/pixel ratio (SMAA só no desktop)
+- **Qualidade adaptativa ao vivo**: detecta mobile/GPU fraca **e ajusta em tempo
+  real** — se o frame estoura por ~2 s, desliga o SMAA e baixa pixel ratio/bloom
+  sozinho (com aviso); sobrou quadro, sobe de volta (SMAA só no desktop)
 - **Timestep fixo** de física (60 Hz) e limpeza de recursos ao sair
 
 ## Como jogar

@@ -142,14 +142,16 @@ roda no navegador"):
 | # | Fase | Itens | Status |
 | --- | --- | --- | --- |
 | A | **Doc-parâmetro** (`MELHORIAS-3D-E-IA.md`) | verificação + plano + resultados | ✅ |
-| B | **Perf: acabar com as travadas** | B1 pool fixo de luzes (sem recompilar shader) · B2 colisão deslizante + unstick · B3 qualidade adaptativa dinâmica · B4 zero alocação por frame | ⬜ |
-| C | **IA clássica** | C1 pathfinding na grade de ruas (waypoints) · C2 rivais com papéis/pinça/separação · C3 SEGV fase 2 + feint + reação | ⬜ |
+| B | **Perf: acabar com as travadas** | B1 pool fixo de luzes (sem recompilar shader) ✅ · B2 colisão deslizante + unstick ✅ · B3 qualidade adaptativa dinâmica ✅ · B4 zero alocação por frame ✅ | ✅ |
+| C | **IA clássica** | C1 pathfinding na grade de ruas (waypoints) ✅ · C2 rivais com papéis/pinça/separação ✅ · C3 SEGV fase furiosa + punição de camper ✅ | ✅ |
 | D | **Cérebro LLM local** | D1 módulo WebLLM + menu/seleção · D2 integração rivais/SEGV · D3 fallback/retry/cadência · D4 testes | ✅ |
-| E | **3D visual** | E1 kits próprios por carro · E2 rivais legíveis (ram bar, giroflex, "!") · E3 SEGV por estado/fase · E4 trânsito com freio · E5 detalhes de rua | ⬜ |
-| F | **Validação + docs + commits** | harness CDP, README, doc com resultados, commits temáticos | 🔷 |
+| E | **3D visual** | E1 kits próprios por carro ✅ · E2 rivais legíveis ("!", giroflex, dentes) ✅ · E3 SEGV com rastro/fumaça/fase ✅ · E4 trânsito com freio real ✅ · E5 detalhes de rua (manhole/faixa) | ⬜ |
+| F | **Validação + docs + commits** | harness CDP, README, doc com resultados, commits temáticos | ✅ |
 
 > Ordem de execução acordada: **D (testar o 360M primeiro)** → depois B/C/E com o
-> mesmo rigor. **D está fechado**: o SmolLM2-360M passou no teste (seção 6).
+> mesmo rigor. **D, B, C e E1–E4 estão fechados** (seções 6 e 8); **E5** (detalhes
+> de rua: tampas de esgoto/faixas) ficou em aberto por ora — é puramente
+> cosmético e o resto já mudou a experiência.
 
 ## 5. Implementação do cérebro (D1–D4) — o que entrou no jogo ✅
 
@@ -210,6 +212,34 @@ quem quiser motivos melhores e mais variedade (a troca é 1 clique).
 - Limitações conhecidas: SwiftShader/CPU não foi medido (esperado: mais lento que
   os 0,55–2,85 s da GPU); o motivo do 360M é imperfeito; ele tende a repetir a
   opção de maior score (comportamento seguro, mas pouco "criativo").
+
+## 8. Resultados das fases B/C/E — validado em harness (30/09/2026) ✅
+
+Harness `bce-check.mjs`/`bce-fix.mjs` (Chrome headless, GPU `amd/rdna-2`, janela
+ao vivo intercalada) + re-execução do teste do cérebro sobre o código novo:
+
+| Verificação | Resultado |
+| --- | --- |
+| B1 — contagem de luzes (base × caçada × arena) | **7 = 7 = 7 = 7** — nada muda luz em runtime, zero recompilação de shader |
+| B2 — atolamento do SEGV (26 amostras com velocidade > 5) | **0** (antes: clamp por eixo travava no canto) + "SEGV MANOBRA!" de resgate |
+| B2 — grade de ruas (C1) | waypoints do SEGV preenchidos durante a luta (`teveWaypoints: true`) |
+| B3 — qualidade adaptativa forçada | nível 0→2: SMAA desligado, bloom 0,72→0,5, pixel ratio reduzível |
+| B4 — frame a frame (GPU real) | **avg 16,8 ms · p95 20,9 ms** (60 fps travado), console limpo |
+| C2 — papéis + separação | `role0 = "bloqueador"`; modos da matilha evoluindo nos 4 estados, sem empilhar |
+| C3 — fase furiosa | dano até **40% da vida** → `furioso: true` (olho/faixa âmbar, telegrafa −28%) |
+| C3 — punição de camper | jogador parado >2,5 s → próxima investida em 0,5 s (lógica no `stalk`) |
+| E1 — kits 3D por carro | NEON `[t,f,f]` · PHANTOM `[f,t,f]` · TANK `[f,f,t]` |
+| E2 — leitura de intenção | sprite **"!"** visível no telegrafo (`alertViu: true`), giroflex presente, `role0` correto |
+| E3 — SEGV com presença | rastro de faíscas na carga e fumaça <35% de vida, exercitados sem exceção |
+| E4 — freio do trânsito | na frente: **12,7 → 7,9** u/s com lanterna forte; livre: volta a **12,7** |
+| Regressão geral | fase + arena via `__rr.step()` **sem exceções; 0 erros de console** |
+| Cérebro LLM sobre o código novo | carga **5,1 s (cache do navegador)** · bateria **6/6 JSON** · caçada `ok 2/2` · boss `ok 3/3` · toasts aplicados |
+
+**Veredito: B, C e E1–E4 fechados.** O "travando" do chefão atacado nas três
+frentes (luzes constantes, colisão deslizante + unstick e qualidade adaptativa) e
+a jogabilidade ganhou a grade de ruas, papéis na matilha, fase furiosa e leitura
+visual. Pendência cosmética única: **E5** (tampas de esgoto/faixas na rua).
+
 
 
 
