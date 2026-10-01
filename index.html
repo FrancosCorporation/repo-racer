@@ -124,6 +124,20 @@
     color: var(--green); font-size: 16px; letter-spacing: 3px; box-shadow: 0 0 24px rgba(57,255,136,.25); cursor: pointer;
   }
   #start .keys { font-size: 12px; color: #7f97ab; }
+  /* cérebro LLM: seletor no menu inicial + status; tudo opcional */
+  #brain { display: flex; flex-direction: column; align-items: center; gap: 7px; margin-top: 2px; max-width: 620px; }
+  #brain .b-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  #brain .b-title { font-size: 11px; letter-spacing: 2px; color: #7f97ab; }
+  #brain-btn {
+    font: inherit; font-size: 12px; letter-spacing: 1px; padding: 7px 18px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #7c4dff; color: #b39dff; background: rgba(10, 6, 26, .82); transition: border-color .12s ease, color .12s ease;
+  }
+  #brain-btn.on { border-color: var(--magenta); color: var(--magenta); box-shadow: 0 0 16px rgba(255,45,149,.28); }
+  #brain-btn.ready { border-color: var(--green); color: var(--green); box-shadow: 0 0 16px rgba(57,255,136,.3); }
+  #brain-btn.loading { opacity: .75; cursor: progress; }
+  #brain-status { font-size: 11px; color: #7f97ab; line-height: 1.5; }
+  #brain-status.on { color: var(--green); }
+  #brain-status.err { color: #ff5470; }
   #done {
     position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
     flex-direction: column; gap: 12px; background: rgba(4,6,15,.88); z-index: 40; text-align: center; padding: 20px;
@@ -183,6 +197,7 @@
     <div class="score-row"><span>PONTOS <span id="score">0</span></span><span id="combo"></span></div>
     <div class="row"><span>MELHOR VOLTA</span><span id="loop-best">--</span></div>
     <div class="row"><span>VOLTAS NA SESSÃO</span><span id="loop-laps">0</span></div>
+    <div class="row" id="brain-hud-row" style="display: none"><span>CÉREBRO</span><span id="brain-hud">--</span></div>
     <div id="nitro-wrap"><div id="nitro"></div></div>
   </div>
   <div id="way" class="box">
@@ -234,6 +249,13 @@
     Os <b>circulos de fase</b> espalhados pela cidade liberam desafios: aquecimento, circuito de portais, zona de drift, caça, o laco infinito e o chefao.
     Cada fase libera a proxima conforme a sua pontuacao. Passe em cima e aperte <b>E</b> para aceitar.</div>
   <div id="garage"></div>
+  <div id="brain">
+    <div class="b-row">
+      <span class="b-title">CÉREBRO DOS INIMIGOS</span>
+      <button id="brain-btn">CLÁSSICO</button>
+    </div>
+    <div id="brain-status">LLM local opcional — roda 100% no navegador (WebGPU), sem servidor e sem API. Os pesos baixam uma vez e ficam no cache.</div>
+  </div>
   <div class="cta" id="go">DIRIGIR</div>
   <div class="keys">WASD / setas &middot; shift nitro &middot; espaco derrapa &middot; E abre o repo &middot; M som</div>
 </div>
@@ -1864,7 +1886,7 @@ function spawnEnemies(def) {
     mesh.position.set(x, 0, z);
     const heading = a + Math.PI;
     mesh.rotation.y = heading;
-    enemies.push({ mesh, x, z, heading, moveH: heading, speed: 0, hp: phaseState.diff >= 2 ? 4 : 3, mode: 'stalk', modeT: 2.4 + i * 0.8, hitCd: 0, alive: true, lean: 0, flashT: 0, flank: i * 2.4, dir: i % 2 ? 1 : -1 });
+    enemies.push({ mesh, x, z, heading, moveH: heading, speed: 0, hp: phaseState.diff >= 2 ? 4 : 3, mode: 'stalk', modeT: 2.4 + i * 0.8, hitCd: 0, alive: true, lean: 0, flashT: 0, flank: i * 2.4, dir: i % 2 ? 1 : -1, holdT: 0 });
   }
 }
 function clearEnemies() {
@@ -1907,7 +1929,8 @@ function updateEnemies(dt) {
       e.flank += dt * 0.9 * (e.dir || 1);
       const fAng = want + clamp(Math.sin(e.flank), -1, 1) * clamp((dist - 8) / 40, 0, 1) * 0.9;
       e.heading = turnToward(e.heading, fAng, turn, dt);
-      if (e.modeT <= 0) { e.mode = 'telegraph'; e.modeT = 0.8; tone(660, 0.1, { gain: 0.05 }); }
+      // cerebro (opcional): o lider da matilha pode escolher a tatica antes de carregar
+      if (e.modeT <= 0 && !brainTryDecideEnemy(e)) { e.mode = 'telegraph'; e.modeT = 0.8; tone(660, 0.1, { gain: 0.05 }); }
     } else if (e.mode === 'telegraph') {
       turn = 2.6;
       e.heading = turnToward(e.heading, want, turn, dt);
@@ -1923,7 +1946,8 @@ function updateEnemies(dt) {
       e.modeT = Math.max(1.2, 3 + rand() * 2 - (aggr - 1));
       e.flank = rand() * Math.PI * 2;
     }
-    const target = ENEMY_SPEED[e.mode] * (e.mode === 'stalk' || e.mode === 'charge' ? aggr : 1);
+    e.holdT = Math.max(0, (e.holdT || 0) - dt); // tática SEGURAR do cerebro
+    const target = ENEMY_SPEED[e.mode] * (e.mode === 'stalk' || e.mode === 'charge' ? aggr : 1) * (e.holdT > 0 ? 0.6 : 1);
     e.speed += clamp(target - e.speed, -70 * dt, accel * dt);
     e.moveH = turnToward(e.moveH, e.heading, turn * 0.6, dt);
     e.x += Math.sin(e.moveH) * e.speed * dt;
@@ -2627,6 +2651,316 @@ function turnToward(h, want, rate, dt) {
   return h + clamp(diff, -rate * dt, rate * dt);
 }
 
+/* ============================================================================
+   CÉREBRO LLM LOCAL (opcional) — mesmo padrão validado no botao_ia:
+   WebLLM/WebGPU roda DENTRO do navegador, SEM servidor e SEM API (os pesos
+   baixam UMA vez e ficam no cache). O modelo NÃO inventa a jogada: a FSM monta
+   um menu de táticas com score local, o LLM escolhe UMA e responde
+   {"i": n, "motivo": "..."}. JSON validado + 2ª tentativa + fallback
+   heurístico em qualquer falha — o jogo nunca trava. Decisão assíncrona:
+   1 requisição em voo, só nas transições de modo (a FSM segue valendo).
+   ========================================================================== */
+const BRAIN_URL = 'https://esm.run/@mlc-ai/web-llm@0.2.85';
+const BRAIN_MODELS = [
+  { id: 'SmolLM2-360M-Instruct-q4f16_1-MLC', short: '360M', nome: 'SmolLM2 360M' },
+  { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', short: '0.5B', nome: 'Qwen2.5 0.5B' },
+];
+const BRAIN_KEY = 'francos-repo-racer-brain';
+const BRAIN_SYS = 'Você é a IA de um jogo de corrida no navegador. Responda APENAS com JSON válido, sem ``` e sem texto fora do JSON, sem raciocínio.';
+const brain = {
+  enabled: false, sel: 0, engine: null, engineModel: '', loading: false, progress: 0,
+  busy: false, reqs: 0, ok: 0, fallback: 0, lastMs: 0, lastErr: '', lastRaw: '',
+  lastPrompt: '', lastMotivo: '', lastToastT: -1e9, nextAt: 0, enemyAt: 0, candN: 0,
+};
+function brainModel() { return BRAIN_MODELS[brain.sel]; }
+function brainSave() {
+  try { localStorage.setItem(BRAIN_KEY, brain.enabled ? brainModel().id : 'off'); } catch (e) { /* sem storage */ }
+}
+function brainPaint() {
+  const btn = document.getElementById('brain-btn');
+  if (!btn) return;
+  const st = document.getElementById('brain-status');
+  const row = document.getElementById('brain-hud-row');
+  const m = brainModel();
+  btn.classList.toggle('on', brain.enabled);
+  btn.classList.toggle('ready', !!(brain.engine && brain.enabled));
+  btn.classList.toggle('loading', brain.loading);
+  btn.textContent = brain.loading ? 'CARREGANDO ' + Math.round(brain.progress * 100) + '%'
+    : brain.enabled ? (brain.engine ? 'LLM ' + m.short + ' ✓' : 'LLM ' + m.short + ' (baixar)')
+    : 'CLÁSSICO';
+  if (st) {
+    st.classList.toggle('on', !!(brain.engine && brain.enabled));
+    st.classList.toggle('err', !!brain.lastErr && brain.enabled);
+    st.textContent = brain.loading ? 'preparando ' + m.nome + ' na GPU… ' + Math.round(brain.progress * 100) + '%'
+      : brain.engine && brain.enabled ? 'ativo: ' + m.nome + ' — decisões no LLM: ' + brain.ok + '/' + brain.reqs + ' (o resto cai na heurística)'
+      : brain.enabled ? 'clique no botão para baixar ' + m.nome + ' (uma vez, fica no cache do navegador)'
+      : 'LLM local opcional — roda 100% no navegador (WebGPU), sem servidor e sem API. Os pesos baixam uma vez e ficam no cache.';
+  }
+  if (row) {
+    row.style.display = brain.enabled ? 'flex' : 'none';
+    const hud = document.getElementById('brain-hud');
+    if (hud && brain.enabled) hud.textContent = (brain.engine ? m.short : '—') + ' · ' + brain.ok + '/' + brain.reqs;
+  }
+}
+/* prepara o motor WebLLM; na 1ª vez baixa os pesos (mostra o progresso) */
+async function brainLoad(idx) {
+  if (brain.loading) return false;
+  brain.sel = clamp(idx | 0, 0, BRAIN_MODELS.length - 1);
+  const m = brainModel();
+  if (brain.engine && brain.engineModel === m.id) { brain.enabled = true; brainSave(); brainPaint(); return true; }
+  brain.loading = true; brain.progress = 0; brain.lastErr = ''; brainPaint();
+  try {
+    if (!navigator.gpu) throw new Error('WebGPU indisponível — ative chrome://flags/#enable-unsafe-webgpu e reabra o navegador');
+    const adapt = await navigator.gpu.requestAdapter();
+    if (!adapt) throw new Error('sem adaptador WebGPU (nem por software)');
+    const webllm = await import(BRAIN_URL);
+    if (brain.engine) { try { await brain.engine.unload(); } catch (e) { /* ignora */ } brain.engine = null; brain.engineModel = ''; }
+    const eng = await webllm.CreateMLCEngine(m.id, {
+      initProgressCallback: (p) => { brain.progress = (p && p.progress) || 0; brainPaint(); },
+      logLevel: 'ERROR',
+    });
+    brain.engine = eng; brain.engineModel = m.id;
+    brain.enabled = true; brain.loading = false; brainSave(); brainPaint();
+    toast('CÉREBRO LLM ATIVO: ' + m.nome, '#b39dff');
+    return true;
+  } catch (e) {
+    brain.loading = false; brain.enabled = false;
+    brain.lastErr = String((e && e.message) || e);
+    brainPaint();
+    toast('LLM INDISPONÍVEL — seguindo no clássico', '#ff5470');
+    return false;
+  }
+}
+/* extrai o 1º objeto JSON balanceado (aceita ```json, texto em volta e "}}" extra) */
+function brainExtract(texto) {
+  if (!texto) return null;
+  let t = String(texto).trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) t = fence[1].trim();
+  const a = t.indexOf('{');
+  if (a < 0) return null;
+  let prof = 0, fim = -1;
+  for (let k = a; k < t.length; k++) {
+    const ch = t[k];
+    if (ch === '{') prof++;
+    else if (ch === '}') { prof--; if (prof === 0) { fim = k; break; } }
+  }
+  if (fim < 0) return null;
+  try { return JSON.parse(t.slice(a, fim + 1)); } catch (e) { return null; }
+}
+/* valida contra o menu: i precisa apontar para uma tática existente */
+function brainValidate(obj, n) {
+  if (!obj || typeof obj !== 'object') return null;
+  const i = Math.trunc(Number(obj.i));
+  if (!Number.isFinite(i) || i < 1 || i > n) return null;
+  const motivo = typeof obj.motivo === 'string' && obj.motivo.trim() ? obj.motivo.trim().slice(0, 90) : 'escolha tática';
+  return { idx: i - 1, motivo };
+}
+/* 1 requisição em voo; temperatura 0; retry com limite explícito; nunca lança */
+async function brainAsk(prompt) {
+  if (!brain.engine || brain.busy) return null;
+  brain.busy = true; brain.reqs++; brain.lastPrompt = prompt;
+  const t0 = performance.now();
+  try {
+    const pede = (p) => brain.engine.chat.completions.create({
+      messages: [{ role: 'system', content: BRAIN_SYS }, { role: 'user', content: p }],
+      temperature: 0, max_tokens: 60,
+    });
+    const le = (r) => (r && r.choices && r.choices[0] && r.choices[0].message ? (r.choices[0].message.content || '') : '');
+    let texto = le(await pede(prompt));
+    brain.lastRaw = texto;
+    let esc = brainValidate(brainExtract(texto), brain.candN);
+    if (!esc && brain.candN > 0) {
+      texto = le(await pede(prompt + '\nERRO: i inválido. Use SOMENTE números de 1 a ' + brain.candN + '. Responda de novo, APENAS o JSON.'));
+      brain.lastRaw = texto;
+      esc = brainValidate(brainExtract(texto), brain.candN);
+    }
+    brain.lastMs = performance.now() - t0;
+    if (esc) brain.ok++;
+    return esc;
+  } catch (e) {
+    brain.lastErr = String((e && e.message) || e).slice(0, 120);
+    return null;
+  } finally {
+    brain.busy = false;
+    brainPaint();
+  }
+}
+/* --- menu de táticas do CHEFÃO (score local; o LLM escolhe e pode discordar) --- */
+function brainMenuBoss(b, st, dist, cSpd) {
+  const align = Math.cos(Math.atan2(car.position.x - b.x, car.position.z - b.z) - b.heading);
+  const cands = [
+    { key: 'carga', txt: 'CARGA DIRETA: telegrafa e parte pra cima agora', score: 3 + (align > 0.55 ? 1 : 0) + (dist < 30 ? 1 : 0) },
+    { key: 'finta', txt: 'FINTA: telegrafa curto, recua um toque e volta mais rápido', score: 2 + (cSpd > 24 ? 1 : 0) },
+    { key: 'corte', txt: 'CORTAR CAMINHO: vai pro ponto onde o jogador VAI estar', score: 2 + (dist > 25 ? 1 : 0) },
+    { key: 'recuo', txt: 'RECUO TÁTICO: ganha distância e recompõe antes de voltar', score: 1 + (dist < 14 ? 1 : 0) },
+  ];
+  const estado = 'Jogador a ' + Math.round(dist) + ' m a ' + Math.round(cSpd * 3.6) + ' km/h'
+    + (state.boosting ? ' (NITRO ligado)' : '') + (Math.abs(state.speed) < 3 ? ' (quase parado)' : '')
+    + '; SEGV a ' + Math.round(b.speed * 3.6) + ' km/h no modo ' + b.mode + ', vida ' + Math.round(b.hp) + '/' + b.maxHp + '.';
+  return { cands, estado };
+}
+/* --- menu de táticas do RIVAL (líder da matilha) --- */
+function brainMenuEnemy(e, dist, cSpd, vivos) {
+  const cands = [
+    { key: 'carga', txt: 'CARGA AGORA: acelera e tenta o bote neste rival', score: 3 + (dist < 24 ? 1 : 0) },
+    { key: 'esq', txt: 'FLANQUEAR PELA ESQUERDA: fecha o cerco pelo lado esquerdo', score: 2 + (dist > 18 ? 1 : 0) },
+    { key: 'dir', txt: 'FLANQUEAR PELA DIREITA: fecha o cerco pelo lado direito', score: 2 + (dist > 18 ? 1 : 0) },
+    { key: 'espera', txt: 'SEGURAR: mantém a caça de longe e espera o momento', score: 1 + (cSpd > 30 ? 1 : 0) },
+  ];
+  const estado = 'Jogador a ' + Math.round(dist) + ' m a ' + Math.round(cSpd * 3.6) + ' km/h'
+    + (state.boosting ? ' (NITRO ligado)' : '') + '; ' + vivos + ' rivais vivos; rival a '
+    + Math.round(e.speed * 3.6) + ' km/h no modo ' + e.mode + '.';
+  return { cands, estado };
+}
+function brainPrompt(quem, estado, cands) {
+  return [
+    'Jogo: corrida neon 3D no navegador. Você controla ' + quem + ' e persegue o jogador.',
+    'Estado: ' + estado,
+    'TÁTICAS (o score local diz o quanto a situação pede; você pode discordar):',
+    ...cands.map((c, i) => (i + 1) + '. ' + c.txt + ' | score ' + (c.score > 0 ? '+' : '') + c.score),
+    'Escolha EXATAMENTE UMA tática. Responda APENAS JSON: {"i": <número de 1 a ' + cands.length + '>, "motivo": "<até 6 palavras em pt-BR>"}',
+  ].join('\n');
+}
+function brainApplyToast(quem, motivo) {
+  brain.lastMotivo = motivo;
+  const now = performance.now();
+  if (now - brain.lastToastT > 4500) {
+    brain.lastToastT = now;
+    toast(quem + ' (IA): ' + motivo, quem === 'SEGV' ? '#ff5470' : '#ff7043');
+  }
+}
+function brainApplyBoss(b, key, motivo) {
+  const st = bossStats();
+  if (key === 'carga') {
+    b.mode = 'telegraph'; b.modeT = st.telegraphT;
+    tone(880, 0.12, { gain: 0.07 }); tone(880, 0.12, { gain: 0.07, delay: 0.22 });
+  } else if (key === 'finta') {
+    b.mode = 'telegraph'; b.modeT = st.telegraphT * 0.5; b.feint = 2;
+    tone(880, 0.1, { gain: 0.06 });
+  } else if (key === 'corte') {
+    const cSpd = Math.abs(state.speed);
+    b.mode = 'stalk'; b.modeT = 1.6; b.cutT = 1.4;
+    b.cutX = car.position.x + Math.sin(state.moveH) * cSpd * 1.4;
+    b.cutZ = car.position.z + Math.cos(state.moveH) * cSpd * 1.4;
+  } else {
+    b.mode = 'recover'; b.modeT = 1.3;
+  }
+  brainApplyToast('SEGV', motivo);
+}
+function brainApplyEnemy(e, key, motivo) {
+  if (key === 'carga') { e.mode = 'telegraph'; e.modeT = 0.8; tone(660, 0.1, { gain: 0.05 }); }
+  else if (key === 'esq') { e.dir = -1; e.flank += 1.2; e.modeT = Math.max(e.modeT, 1.4); }
+  else if (key === 'dir') { e.dir = 1; e.flank += 1.2; e.modeT = Math.max(e.modeT, 1.4); }
+  else { e.holdT = 1.6; e.modeT = Math.max(e.modeT, 1.6); }
+  brainApplyToast('RIVAL', motivo);
+}
+/* --- CHEFÃO: pede a decisão ao cérebro (assíncrono) e segue a FSM enquanto pensa --- */
+function brainTryDecideBoss(b) {
+  if (!brain.enabled || !brain.engine || brain.busy || performance.now() < brain.nextAt) return false;
+  const st = bossStats();
+  const dx = car.position.x - b.x, dz = car.position.z - b.z;
+  const dist = Math.hypot(dx, dz) || 0.001;
+  const cSpd = Math.abs(state.speed);
+  const { cands, estado } = brainMenuBoss(b, st, dist, cSpd);
+  const fallbackIdx = cands.reduce((bi, c, i) => (c.score > cands[bi].score ? i : bi), 0);
+  brain.candN = cands.length;
+  brain.nextAt = performance.now() + 2500; // cadência: não pergunta a cada quadro
+  brainAsk(brainPrompt('SEGV, o chefe caçador', estado, cands)).then((esc) => {
+    if (!b.alive) return;
+    const idx = esc ? esc.idx : fallbackIdx;
+    if (!esc) brain.fallback++;
+    brainApplyBoss(b, cands[idx].key, esc ? esc.motivo : 'leitura tática (heurística)');
+  });
+  return true; // decisão em voo: o SEGV "hesita" no stalk enquanto o modelo pensa
+}
+/* --- RIVAIS: só o líder da matilha pergunta (1 pedido por vez no jogo todo) --- */
+function brainEnemyIsLeader(e) {
+  const d = Math.hypot(e.x - car.position.x, e.z - car.position.z);
+  for (const o of enemies) {
+    if (o === e || !o.alive) continue;
+    if (Math.hypot(o.x - car.position.x, o.z - car.position.z) < d) return false;
+  }
+  return true;
+}
+function brainTryDecideEnemy(e) {
+  if (!brain.enabled || !brain.engine || brain.busy) return false;
+  if (performance.now() < brain.enemyAt) return false;
+  if (!brainEnemyIsLeader(e)) return false;
+  const dist = Math.hypot(e.x - car.position.x, e.z - car.position.z) || 0.001;
+  const cSpd = Math.abs(state.speed);
+  const vivos = enemies.reduce((a, o) => a + (o.alive ? 1 : 0), 0);
+  const { cands, estado } = brainMenuEnemy(e, dist, cSpd, vivos);
+  const fallbackIdx = cands.reduce((bi, c, i) => (c.score > cands[bi].score ? i : bi), 0);
+  brain.candN = cands.length;
+  brain.enemyAt = performance.now() + 4000;
+  brainAsk(brainPrompt('o líder dos rivais', estado, cands)).then((esc) => {
+    if (!e.alive) return;
+    const idx = esc ? esc.idx : fallbackIdx;
+    if (!esc) brain.fallback++;
+    brainApplyEnemy(e, cands[idx].key, esc ? esc.motivo : 'leitura tática (heurística)');
+  });
+  return true;
+}
+/* --- AUTO-TESTE do modelo (harness CDP e console): bateria de decisões canônicas --- */
+async function brainSelfTest(n) {
+  const casos = [
+    { tipo: 'boss', dist: 26, cSpd: 30, boosting: true, bSpeed: 24, hp: 100, maxHp: 100, modo: 'stalk' },
+    { tipo: 'boss', dist: 10, cSpd: 12, boosting: false, bSpeed: 18, hp: 70, maxHp: 100, modo: 'stalk' },
+    { tipo: 'boss', dist: 42, cSpd: 34, boosting: true, bSpeed: 24, hp: 45, maxHp: 150, modo: 'stalk' },
+    { tipo: 'boss', dist: 16, cSpd: 0.5, boosting: false, bSpeed: 20, hp: 25, maxHp: 100, modo: 'stalk' },
+    { tipo: 'rival', dist: 22, cSpd: 26, boosting: false, n: 3 },
+    { tipo: 'rival', dist: 8, cSpd: 10, boosting: true, n: 5 },
+  ];
+  const usados = casos.slice(0, Math.max(1, Math.min(n || 6, casos.length)));
+  const out = [];
+  for (let i = 0; i < usados.length; i++) {
+    const c = usados[i];
+    let cands, estado, quem;
+    if (c.tipo === 'boss') {
+      const fake = { x: 0, z: 0, speed: c.bSpeed, hp: c.hp, maxHp: c.maxHp, mode: c.modo, heading: 0 };
+      const menu = brainMenuBoss(fake, bossStats(), c.dist, c.cSpd);
+      cands = menu.cands; estado = menu.estado; quem = 'SEGV, o chefe caçador';
+    } else {
+      const fake = { x: 0, z: 0, speed: 22, mode: 'stalk' };
+      const menu = brainMenuEnemy(fake, c.dist, c.cSpd, c.n);
+      cands = menu.cands; estado = menu.estado; quem = 'o líder dos rivais';
+    }
+    brain.candN = cands.length;
+    const t0 = performance.now();
+    const esc = await brainAsk(brainPrompt(quem, estado, cands));
+    out.push({
+      n: i + 1, tipo: c.tipo, ok: !!esc, i: esc ? esc.idx + 1 : 0, motivo: esc ? esc.motivo : '',
+      ms: Math.round(performance.now() - t0), raw: brain.lastRaw.slice(0, 90),
+    });
+  }
+  console.log('[brain-self-test]', JSON.stringify(out));
+  brainPaint();
+  return out;
+}
+/* --- UI: o botão cicla CLÁSSICO → LLM 360M → LLM 0.5B → CLÁSSICO --- */
+(function brainBind() {
+  const btn = document.getElementById('brain-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    if (brain.loading) return;
+    if (!brain.enabled || !brain.engine) {
+      let saved = '';
+      try { saved = localStorage.getItem(BRAIN_KEY) || ''; } catch (e) { saved = ''; }
+      const i = BRAIN_MODELS.findIndex((x) => x.id === saved);
+      if (i >= 0 && !brain.engine) brain.sel = i;
+      brainLoad(brain.sel);
+    } else if (brain.sel < BRAIN_MODELS.length - 1) {
+      brainLoad(brain.sel + 1);
+    } else {
+      brain.enabled = false; brain.sel = 0; brainSave(); brainPaint();
+      toast('CÉREBRO: CLÁSSICO', '#9fb8cc');
+    }
+  });
+  brainPaint();
+})();
+/* -- brain: parte 4 fim -- */
+
 function startBoss() {
   if (state.bossActive || bossResult === 'win') return;
   cancelLoopRide(); // duelo comecando: carro fora do passeio do laco
@@ -2643,7 +2977,7 @@ function startBoss() {
     x: sx, z: sz,
     heading: Math.atan2(car.position.x - sx, car.position.z - sz),
     speed: 0, hp: st2.hp, maxHp: st2.hp, mode: 'stalk', modeT: 4,
-    flashT: 0, alive: true, lean: 0, moveH: 0, avoidSide: 0
+    flashT: 0, alive: true, lean: 0, moveH: 0, avoidSide: 0, feint: 0, cutT: 0, cutX: 0, cutZ: 0
   };
   boss.moveH = boss.heading;
   bossMesh.group.visible = true;
@@ -2747,19 +3081,41 @@ function updateBoss(dt) {
   b.modeT -= dt;
   if (b.mode === 'stalk') {
     target = st.stalk;
-    if (!bossAvoid(b, dt)) b.heading = turnToward(b.heading, want, 1.5, dt);
+    b.cutT = Math.max(0, (b.cutT || 0) - dt);
+    if (b.cutT > 0) {
+      // CORTE DE CAMINHO (tática do cerebro): mira o ponto onde voce VAI estar
+      const cw = Math.atan2(b.cutX - b.x, b.cutZ - b.z);
+      if (!bossAvoid(b, dt)) b.heading = turnToward(b.heading, cw, 2.2, dt);
+      target = st.stalk * 1.12;
+    } else if (!bossAvoid(b, dt)) {
+      b.heading = turnToward(b.heading, want, 1.5, dt);
+    }
     if (b.modeT <= 0) {
-      b.mode = 'telegraph'; b.modeT = st.telegraphT;
-      tone(880, 0.12, { gain: 0.07 });
-      tone(880, 0.12, { gain: 0.07, delay: 0.22 });
+      if (b.feint === 3) {
+        // FINTA concluida (recuou um toque): agora volta pra valer
+        b.feint = 0;
+        b.mode = 'charge'; b.modeT = 1.7; b.heading = Math.atan2(dx, dz);
+        tone(220, 0.5, { type: 'sawtooth', gain: 0.08, freqEnd: 660 });
+      } else if (!brainTryDecideBoss(b)) {
+        b.mode = 'telegraph'; b.modeT = st.telegraphT;
+        tone(880, 0.12, { gain: 0.07 });
+        tone(880, 0.12, { gain: 0.07, delay: 0.22 });
+      }
     }
   } else if (b.mode === 'telegraph') {
     target = 5;
     b.heading = turnToward(b.heading, want, 2.4, dt);
     if (b.modeT <= 0) {
-      b.mode = 'charge'; b.modeT = 1.7;
-      b.heading = Math.atan2(dx, dz); // a investida trava no ponto REAL de voce
-      tone(220, 0.5, { type: 'sawtooth', gain: 0.08, freqEnd: 660 });
+      if (b.feint === 2) {
+        // FINTA (tática do cerebro): cancela a carga, recua um toque e cobra depois
+        b.feint = 3;
+        b.mode = 'stalk'; b.modeT = 0.75;
+        tone(620, 0.09, { gain: 0.05 });
+      } else {
+        b.mode = 'charge'; b.modeT = 1.7;
+        b.heading = Math.atan2(dx, dz); // a investida trava no ponto REAL de voce
+        tone(220, 0.5, { type: 'sawtooth', gain: 0.08, freqEnd: 660 });
+      }
     }
   } else if (b.mode === 'charge') {
     target = st.charge;
@@ -4340,6 +4696,18 @@ if (params.has('debug')) {
     instancedCounts: () => scene.children.filter((o) => o.isInstancedMesh).map((o) => o.count),
     antennaCount: () => antennaTips.length,
     reducedMotion: () => REDUCED_MOTION,
+    llm: {
+      load: (i) => brainLoad(i | 0),
+      status: () => ({
+        enabled: brain.enabled, loading: brain.loading, progress: brain.progress,
+        model: brain.engineModel, reqs: brain.reqs, ok: brain.ok, fallback: brain.fallback,
+        lastErr: brain.lastErr, lastMs: brain.lastMs, lastRaw: brain.lastRaw,
+        lastMotivo: brain.lastMotivo, busy: brain.busy, gpu: !!navigator.gpu,
+      }),
+      enable: (on) => { brain.enabled = !!on && !!brain.engine; brainSave(); brainPaint(); return brain.enabled; },
+      test: (n) => brainSelfTest(n),
+      _brain: brain, // escape hatch de teste (fallback com motor falso, inspeção)
+    },
     step: (n = 1) => { for (let i = 0; i < n; i++) { update(FIXED_DT); present(FIXED_DT); } },
   };
   // fantasma do recorde anterior volta junto (usa scene/ensureLoopGhost —
