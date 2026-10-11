@@ -145,13 +145,11 @@ roda no navegador"):
 | B | **Perf: acabar com as travadas** | B1 pool fixo de luzes (sem recompilar shader) ✅ · B2 colisão deslizante + unstick ✅ · B3 qualidade adaptativa dinâmica ✅ · B4 zero alocação por frame ✅ | ✅ |
 | C | **IA clássica** | C1 pathfinding na grade de ruas (waypoints) ✅ · C2 rivais com papéis/pinça/separação ✅ · C3 SEGV fase furiosa + punição de camper ✅ | ✅ |
 | D | **Cérebro LLM local** | D1 módulo WebLLM + menu/seleção · D2 integração rivais/SEGV · D3 fallback/retry/cadência · D4 testes | ✅ |
-| E | **3D visual** | E1 kits próprios por carro ✅ · E2 rivais legíveis ("!", giroflex, dentes) ✅ · E3 SEGV com rastro/fumaça/fase ✅ · E4 trânsito com freio real ✅ · E5 detalhes de rua (manhole/faixa) | ⬜ |
+| E | **3D visual** | E1 kits próprios por carro ✅ · E2 rivais legíveis ("!", giroflex, dentes) ✅ · E3 SEGV com rastro/fumaça/fase ✅ · E4 trânsito com freio real ✅ · E5 detalhes de rua (manhole/faixa) ✅ | ✅ |
 | F | **Validação + docs + commits** | harness CDP, README, doc com resultados, commits temáticos | ✅ |
 
 > Ordem de execução acordada: **D (testar o 360M primeiro)** → depois B/C/E com o
-> mesmo rigor. **D, B, C e E1–E4 estão fechados** (seções 6 e 8); **E5** (detalhes
-> de rua: tampas de esgoto/faixas) ficou em aberto por ora — é puramente
-> cosmético e o resto já mudou a experiência.
+> mesmo rigor. **D, B, C, E1–E4 e E5 estão fechados** (seções 6, 8 e 10.5).
 
 ## 5. Implementação do cérebro (D1–D4) — o que entrou no jogo ✅
 
@@ -238,7 +236,7 @@ ao vivo intercalada) + re-execução do teste do cérebro sobre o código novo:
 **Veredito: B, C e E1–E4 fechados.** O "travando" do chefão atacado nas três
 frentes (luzes constantes, colisão deslizante + unstick e qualidade adaptativa) e
 a jogabilidade ganhou a grade de ruas, papéis na matilha, fase furiosa e leitura
-visual. Pendência cosmética única: **E5** (tampas de esgoto/faixas na rua).
+visual. Pendência cosmética única (**E5**) fechada na seção 10.5.
 
 
 
@@ -270,5 +268,124 @@ com Chrome headless) antes de mexer no código — nenhuma correção por adivin
 | Regressão de performance | luzes 7 = 7 = 7, frame **avg 16,6 ms · p95 19,5 ms**, SMAA/bloom intactos |
 
 **Veredito:** laço, GPS e a leitura visual do carro/prédio estão fechados com
-evidência. Pendências cosméticas que sobraram: **E5** (tampas de esgoto/faixas na
-rua) e o teste do **Qwen2.5-0.5B em navegador real**.
+evidência. **E5** fechou na seção 10.5; seguia pendente só o teste do
+**Qwen2.5-0.5B em navegador real** (seção 10.6).
+
+## 10. Rodada de IA — chefão/rivais sem auto-destruição, LLM provado em jogo (01/10/2026) ✅
+
+Foco desta rodada: **jogabilidade do carro principal**. Toda correção foi
+diagnóstica (telemetria no harness antes de mexer no código) e validada com
+métricas antes/depois no harness `ai-test.mjs` (`/tmp/rr-ai/`, fora do repo —
+cenários A: quem foge 75 s, B: quem se esconde, C: caçada de rivais 50 s,
+D: cérebro LLM, P: performance).
+
+### 10.1 Diagnóstico → correção
+
+| Sintoma medido | Causa real (achada na telemetria) | Correção no `index.html` |
+| --- | --- | --- |
+| SEGV morre em prédio (`-15` por crash, 6× na fuga) | investida liberada por LOS **de uma linha** que "vaza" pelas frestas dos quarteirões; a rota varrida pelo carro ≠ linha do jogador | `losCar()` com **3 linhas paralelas** (centro ±3,4), **`losStreak`** de 0,3 s estáveis, ray-brake (`losClear` da rota com margem 3,8), aim-verify no ponto antecipado e crash-block com escape tangente |
+| Crash instantâneo ao lançar (raspão a 2 u/s = `-15`) | lançava a investida já **encostado** no prédio (equilíbrio empurrão/empurrão) | guarda `!circleHitsBuilding(b, 7.5)` no lançamento; dano `-15` só com `speed > 10` (raspão barato só solta o carro) |
+| Telegraph a 90+ m = armadilha (trava a 5 u/s, alvo foge) | gate só em LOS, sem distância | gates `dist < 90` (boss) / `< 60` (rivais) + escape `> 105` / `> 75`; charge perto (`< 25`) janela estendida 1,7 → **2,4 s** |
+| Loop de waypoints (boss circulava 38..96 × 134..190 atrás do esconderijo) | `streetPathTo` pegava a rua vizinha em **contramão** e pernas cortavam quarteirão | `roadToward(v, t)` (só rua a caminho do alvo) + `streetHeading(o)` para recuperar o rumo quando dentro do bloco |
+| Rivais patrulham a ~22 m sem reagir | gate de telegraph exigia LOS estável 0,3 s — rival2: **0/58** com LOS; e stalk 33 vs jogador 30 não fechava a volta | fallback de proximidade (`dist < 30` telegrafa sem LOS; investida aceita LOS instantâneo a `< 40`), `aggrV = 1+(aggr−1)·0.65` (stalk 36 no médio, cap 46/60) e raio de contato 3,6 → **4,2** |
+| Rival **congelado 45 s** soldado no prédio em (-22,151) (posição idêntica segundo a segundo) | colisão todo frame derrubava a velocidade para ~2 u/s e o unstick antigo exigia `speed > 4` — nunca disparava | `contactT`: 0,55 s de contato contínuo = escape para fora (`heading = away`, speed 14, smoke). Métrica `atolou` do harness agora pega isso (antes: 0 falso) |
+
+Correções acompanhantes: braces no `else` solto dos rivais (ReferenceError
+iminente), `thinkT` zerado por `brainApply*` + contador `brain.applied`
+(exposto em `llm.status()` e no HUD), `streakN/streakD/trace/path` no `AILog`.
+
+### 10.2 Métricas antes → depois (mesmo harness, mesmo código de medição)
+
+| Cenário | Antes (baseline 30/09) | Depois (01/10) |
+| --- | --- | --- |
+| A — fuga 75 s | **6 crashes** do SEGV, 0 contatos | **0 crashes**, 1 contato (28,4 s), `minDist 0,3`, hp 96 |
+| B — esconde 75 s | 1 crash, morte em 24,9 s mas com patinagem/loop | **0 crashes**, mata o esconderijo em **39,9 s**, 2 contatos, `minDist 0,3`, hp 24 (briga equilibrada) |
+| C — caçada 50 s | 3 contatos com vMax **47/65/76** (foguete), atolos | **4 contatos**, vMax ≤ **60** (cap respeitado), os **3 rivais** ativos (r2 antes: 0), vidas 3→1 |
+| D — cérebro LLM | **SyntaxError** / não carregava no harness | carga 16,8 s · bateria **6/6** · luta: **20/20 requests, 14 decisões aplicadas, 0 fallback**, motivos PT-BR fluindo |
+| P — perf | frame 16,6 ms · stepJs 0,32 ms | frame **16,7 ms** · stepJs **0,24 ms** (GPU real, console limpo) |
+
+### 10.3 Cérebro LLM — como provar que funciona 100%
+
+1. **Flag decisiva**: o Chrome headless só expunha o adaptador **SwiftShader**
+   (sem `shader-f16`, modelos `q4f16` recusados). O combo vencedor foi
+   `--enable-unsafe-webgpu --enable-features=Vulkan --use-angle=vulkan
+   --disable-vulkan-surface --enable-dawn-features=allow_unsafe_apis,disable_adapter_blocklist`
+   → adaptador **amd/rdna-2 com shader-f16: true** (Dawn tem blocklist própria
+   de adaptador, separada da do Chrome).
+2. **Bateria**: 6/6 decisões JSON válidas (índice no menu, ação correta).
+3. **Ao vivo**: 60 s de luta com `llm.enable(true)` — `reqs 20 · ok 20 ·
+   applied 14 · fallback 0`, táticas PT-BR coerentes ("telegrafa e parte pra
+   cima", "acelera e tenta o bote"), fps estável.
+
+### 10.4 Como repetir
+
+```bash
+node /tmp/rr-ai/ai-test.mjs A,B,C,P      # ~4 min, GPU real, grava results.jsonl
+node /tmp/rr-ai/ai-test.mjs D            # SmolLM2 360M, ~2 min (cache no profile2)
+LLM_MODEL=1 node /tmp/rr-ai/ai-test.mjs D  # Qwen2.5 0.5B, ~2 min (1ª vez baixa ~400 MB)
+node /tmp/rr-ai/e5.mjs                   # valida visual E5 (tampas/barras, swatch+pixel)
+```
+
+Telemetria: `__rr.aiLog` (charge/abort/crash/trace/path/st/streak), `__rr.losClear`,
+cenário C grava `dtrace` (distância e posição dos rivais a cada 1 s — foi assim
+que o rival congelado foi pego).
+
+**Veredito:** SEGV pega quem foge **sem se matar** (0 crashes em A e B),
+esconderijo morto, matilha fechando com pressão controlada e **cérebro LLM
+100% provado em jogo**.
+
+### 10.5 E5 — detalhes de rua (tampas de esgoto + barras de parada) ✅
+
+Implementação (2 draw calls via `InstancedMesh`, tudo com **PRNG local**
+`mhSeed=0x51ee7` para não consumir o `rand()` global — o layout dos prédios
+ficou byte a byte idêntico):
+
+- **60 tampas** (5 ruas × 12 por faixa): textura procedural em canvas
+  (anéis + cruz + **filete neon ciano** para existir à noite), `CircleGeometry`
+  r=1,1 a y=0,021, material `MeshStandard` de metal escuro (`roughness 0,58 ·
+  metalness 0,7 · envMapIntensity 0,55` — o primeiro chute com envMap 2,4
+  estourava ciano "blowout");
+- **100 barras de parada** (25 cruzamentos × 4 aproximações): plano 8×0,55 a
+  y=0,03, **±12,7 do cruzamento** — 0,8 m antes da zebra (±4,7..11,9), ficando
+  atrás da calçada (y ≤ 0,035). As 4 barras da esquina (0,0) caem **sob o piso
+  da arena `SEGV // ARENA`** (mesmo destino das zebras daquela esquina — aceito
+  por design).
+
+**Validação visual pixel-provada** (harness `/tmp/rr-ai/e5.mjs`): página única
+`?debug=1&shot=1` + `setCam` por shot + **swatch de cor por era** (div 64×18
+pintada de vermelho/azul/amarelo/magenta conforme o shot) + retry até o pixel do
+swatch (`convert -crop` no ImageMagick) bater com a cor alvo — porque o
+`Page.captureScreenshot` do headless devolve frames stale/stale-state.
+
+| Shot | O que prova | Evidência |
+| --- | --- | --- |
+| 01 tampa próxima | manhole em **(1,92; −33,83)** centrado no quadro | anéis + cruz + filete ciano; era vermelha 1/1 |
+| 02 barra sob a arena | esquina (0,0) | barra coberta pelo piso da arena (esperado) |
+| 03 barra no cruzamento | barra em (0; −67,3) **à frente da zebra** | barra horizontal branca visível; era amarela 1/1; `compare -metric AE` = 0 px vs referência |
+| 04 aérea | barras em contexto na avenida | era magenta 1/1 |
+
+Regressão pós-E5 (`ai-test.mjs A,B,C,P`, 01/10 16:23): **0 erros de console
+nos 4 cenários**; P: frame 16,9 ms · stepJs 0,27 ms; B mata em 39,7 s (hp 24);
+C: 3 rivais ativos com contato cada, vMax ≤ 60, vidas 3→0. Uma execução de A
+saiu outlier (`minDist 54`, só `stalk` — nunca telegrafou); **re-execução
+normal**: `minDist 7,8`, `telegraph 68`, `charge 14`, 0 crashes — variância
+conhecida do cenário, não regressão.
+
+### 10.6 Qwen2.5-0.5B — teste em navegador real ✅ (01/10/2026)
+
+Mesmo harness e mesmo profile do Chrome (GPU real `amd/rdna-2`, WebGPU), modelo
+`Qwen2.5-0.5B-Instruct-q4f16_1-MLC` selecionado via `LLM_MODEL=1`:
+
+| Teste | Resultado |
+| --- | --- |
+| Carga (1ª vez, download + compilação) | **27,0 s**, `gpu: true`, sem erro (depois fica no cache do profile2) |
+| Bateria de 6 decisões canônicas | **6/6 JSON válidos** — SEGV (`FINTA`, `CORTAR CAMINHO`, `CARGA DIRETA`) e rivais (`CARGA AGORA`), **0,81–4,81 s** por decisão |
+| Luta real 60 s com cérebro ligado | **30/30 requests OK · 24 decisões aplicadas · 0 fallback**, motivos PT-BR trocando a cada ~2 s (FINTA → CARGA DIRETA → CORTAR CAMINHO) |
+| Comportamento na luta | SEGV nos 4 modos, `minDist 2,2`, 1 contato, **0 crashes**, **0 erros de console**, fps estável |
+
+**Veredito: o Qwen2.5-0.5B também dá conta** — mesmo acerto de JSON do 360M,
+estável em **~1 s por decisão** no steady-state (carga inicial maior: 27 s vs
+16 s do 360M, só na 1ª vez) e é o upgrade de 1 clique no menu
+(`CLÁSSICO → LLM 360M → LLM 0.5B`).
+
+Repetir: `LLM_MODEL=1 node /tmp/rr-ai/ai-test.mjs D` (~2 min com modelo em cache).

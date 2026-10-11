@@ -1,12 +1,15 @@
 # MELHORIAS — repo-racer
 
-> **Gerado por análise de código em 2026-10-02** · Stack: **arquivo único** (`index.html`, 251 KB) + nginx alpine (container)
-> Branch `main` · base `e9755bb` · sem build step · sem CI · 3 docs de plano existentes
-> **Testes executados de verdade:** container construído e subido, rotas e headers verificados por `curl`.
+> **Diagnóstico-base de 2026-10-02** · Stack: **arquivo único** (`index.html`) + Nginx em container.
+> Os testes citados no histórico abaixo são daquela análise-base; não representam validação das mudanças de 11/10/2026.
 >
 > **Este arquivo é um PLANO DE CONSOLIDAÇÃO.** O projeto já tem `MELHORIAS-3D-E-IA.md` (28 KB),
 > `MELHORIAS-LOOPING.md` (16 KB) e `PLANO-DE-MELHORIAS.md` (1,6 KB). Este arquivo **não repete** o que
 > lá está: aponta o que **falta**, o que os docs **divergem** e o que é **risco real de operação**.
+
+> **Estado em 11/10/2026:** SRI no import map, Nginx estrito, Docker/Compose endurecidos, workflow de CI,
+> `.gitignore`, `SECURITY.md` e índice dos documentos foram implementados. Falta aceite em navegador/container
+> e publicar/executar o workflow. A rodada também preserva melhorias de jogo em andamento descritas no README.
 
 ---
 
@@ -14,19 +17,19 @@
 
 1. **Leia antes**: `PLANO-DE-MELHORIAS.md` (backlog ativo, curto) e as seções de status de
    `MELHORIAS-3D-E-IA.md`. Este documento é o **complemento de segurança/operação**, não o plano geral.
-2. Execute na ordem **P0 → P1 → P2 → P3**, ondas da §8.
-3. **Não reescreva o jogo.** É um arquivo único de 251 KB que roda; o valor está no que funciona.
-   Os itens aqui são de **operação, entrega e consistência de docs** — não de gameplay.
+2. Use a §10 para distinguir implementação de aceite pendente; a ordem original está registrada na §8.
+3. O arquivo único permanece intencional. As melhorias de gameplay e experiência estão descritas no README
+   e no histórico `MELHORIAS-3D-E-IA.md`.
 4. **Idioma:** português.
 
 ---
 
 ## 1. Diagnóstico executivo
 
-Jogo de corrida 3D (three.js) com IA de rivais e boss, HUD e laço de pista. Tudo em **um** `index.html`
-de 251 KB, servido por nginx em container. Sem build step, sem dependências de runtime.
+Jogo de corrida 3D (three.js) com IA de rivais e boss, HUD e laço de pista. O jogo segue em um `index.html`,
+servido opcionalmente por Nginx em container. Sem build step.
 
-**O que está bem e foi verificado em execução:**
+**Diagnóstico da execução-base em 2026-10-02 (histórico):**
 
 | Item | Evidência |
 |---|---|
@@ -38,7 +41,7 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 | `restart: unless-stopped` no compose | `docker-compose.yml:8` |
 | Sem etapa de build → deploy é trivial | `Dockerfile:3` (comentário explica) |
 
-**O que está quebrado (verificado):**
+**Problemas encontrados naquele diagnóstico e endereçados no código nesta rodada:**
 
 1. **Soft-404: todo path inexistente responde `200` com o `index.html`.** Testado:
    `GET /.git/config` → **200**, `GET /package.json` → **200** — mas o corpo é `<!DOCTYPE html>`.
@@ -54,7 +57,7 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 | ID | Título | Sev | Arquivo | Depende de |
 |---|---|---|---|---|
-| SEC-01 | CDN sem SRI (integridade de supply chain) | **P0** | `index.html` (tags CDN) | — |
+| SEC-01 | Imports CDN sem SRI (integridade de supply chain) | **P0** | `index.html` (import map + import dinâmico) | — |
 | SEC-02 | Soft-404: qualquer path responde 200 com o jogo | **P1** | `docker/nginx.conf` | — |
 | SEC-03 | Sem headers de segurança no nginx | **P1** | `docker/nginx.conf` | — |
 | SEC-04 | Versão do nginx exposta (`Server:`) | **P2** | `docker/nginx.conf` | — |
@@ -71,37 +74,36 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 | DOC-02 | Working tree sujo com mudanças não commitadas | **P1** | `git status` | — |
 | DOC-03 | Falta `SECURITY.md` | **P3** | *(ausente)* | — |
 
-**Placar: 1 P0 · 4 P1 · 7 P2 · 3 P3 = 15 itens.**
+**Inventário original:** 15 itens (prioridades mantidas para rastreabilidade). Consulte a §10 para o estado atual.
 
 ---
 
 ## 3. Segurança
-### SEC-01 · CDN sem SRI (integridade de supply chain) · [P0]
+### SEC-01 · Imports CDN sem SRI (integridade de supply chain) · [P0]
 
-- **Arquivo:** `index.html` (tags `<script>`/`<link>` que apontam para `cdn.jsdelivr.net` e `esm.run`)
-- **Evidência:** verificado por `grep -c 'integrity=' index.html` → **0** ocorrências em 251 KB.
-  As dependências são `three@0.160.0` e `@mlc-ai/web-llm@0.2.85` (**versionadas** — bom).
+- **Arquivo:** `index.html` (import map do Three.js e import dinâmico de WebLLM)
+- **Evidência inicial:** havia 0 hashes SRI. As URLs apontam a `three@0.160.0` e
+  `@mlc-ai/web-llm@0.2.85`; o pin de versão não verificava os bytes entregues.
 - **Impacto:** sem `integrity`, o pin de versão **não garante integridade**: o CDN pode entregar
   qualquer conteúdo sob o mesmo path (comprometimento de conta upstream, ou resposta adulterada em
   rota intermediária). Como o jogo **executa** esse código no browser de todos os visitantes, e há
   `web-llm` (WASM, ~300 KB) carregado de fora, o impacto é execução de código arbitrário no
   navegador de quem joga. Risco clássico de supply chain de front-end.
-- **Mudança:** (1) adicionar `integrity="sha384-..."` (ou `sha256-`) + `crossorigin="anonymous"` nas
-  tags CDN — gerar o hash com `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`;
-  (2) alternativa mais forte (se quiser eliminar a dependência externa): **vendorizar** `three.js` e
-  `web-llm` para dentro do repo e servir local — o jogo já é 100% estático, então isso é coerente e
-  remove a dependência de rede por completo; (3) registrar os hashes num commentário para revisão.
-- **Aceite:** as tags CDN têm `integrity` (ou as libs estão vendorizadas e não há CDN).
+- **Mudança aplicada:** a propriedade `integrity` do import map fixa SHA-384 para o núcleo e o grafo
+  completo de módulos Three.js usados no jogo, além do bundle WebLLM importado dinamicamente. Se mudar
+  uma URL/version, baixe a resposta daquela URL, recalcule o SHA-384 e atualize o mapa junto dela.
+- **Aceite:** cada URL CDN importada pelo documento possui hash para os bytes exatos retornados.
 - **Verificação:**
   ```bash
-  grep -c 'integrity=' index.html    # >= 1 (por tag CDN)
-  # se vendorizar:
-  grep -c 'cdn.jsdelivr\|esm.run' index.html   # 0
+  # Revise a chave integrity do import map; não procure atributo HTML integrity.
+  rg -n 'sha384-' index.html
   ```
+  **Aceite no navegador ainda pendente:** confirme que a cena e o modo LLM carregam e que uma
+  resposta CDN com byte alterado é recusada. O modo LLM baixa pesos apenas se o jogador o ativar.
 
 ### SEC-02 · Soft-404: qualquer path responde 200 com o jogo · [P1]
 
-- **Arquivo:** `docker/nginx.conf` (`location /` → `try_files $uri $uri/ /index.html`)
+- **Arquivo:** `docker/nginx.conf` (configuração inicial usava fallback para `/index.html`)
 - **Evidência:** verificado **em execução** (container construído e subido):
   ```
   GET /.git/config -> 200   (corpo: <!DOCTYPE html>, Content-Type: text/html)
@@ -114,11 +116,8 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
   de vulnerabilidade, um WAF ou um teste de health-check **não distingue** "existe" de "não existe" —
   falsos negativos em detecção; (b) **SEO/analítica**: paths errados indexados como páginas válidas;
   (c) `robots.txt`/`favicon.ico` ausentes também retornam o HTML com `200`.
-- **Mudança:** decidir explicitamente: (1) **jogo único** (SPA): manter o fallback, mas responder
-  `200` **apenas** para paths de navegação e usar `404` real para caminhos com extensão (ex.: `/\.json$`,
-  `/\.js$` → 404) — e adicionar `robots.txt`; ou (2) **estático puro**: trocar por
-  `try_files $uri $uri/ =404;` e remover o fallback (o jogo abre em `/` de qualquer forma, já que é
-  um arquivo só).
+- **Mudança aplicada:** a raiz serve explicitamente `/index.html`; os demais caminhos usam
+  `try_files $uri =404;`. Não há rotas internas no jogo.
 - **Aceite:** `/.git/config` e `/package.json` respondem **404**; `/` e rotas do jogo respondem `200`.
 - **Verificação:**
   ```bash
@@ -139,14 +138,10 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
   pode ser interpretado como outro tipo; sem CSP, qualquer injeção futura no HTML roda sem restrição.
   Como o jogo carrega WASM (`web-llm`) e `eval`-free é a prática, o CSP com `wasm-unsafe-eval` é
   obrigatório para não quebrar.
-- **Mudança:** adicionar ao `server {}`:
-  ```nginx
-  add_header X-Content-Type-Options "nosniff" always;
-  add_header X-Frame-Options "SAMEORIGIN" always;
-  add_header Referrer-Policy "no-referrer" always;
-  add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://esm.run 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://cdn.jsdelivr.net https://esm.run; img-src 'self' data: blob:;" always;
-  ```
-  (ajustar `script-src`/`connect-src` ao que for vendorizado no `SEC-01`).
+- **Mudança aplicada:** `docker/nginx.conf` define `nosniff`, `SAMEORIGIN`, `no-referrer`, uma
+  `Permissions-Policy` restritiva e CSP com `wasm-unsafe-eval`, workers Blob e origens usadas por
+  Three.js/WebLLM e pelos downloads de pesos Hugging Face. A compatibilidade do CSP em execução
+  ainda precisa de confirmação no navegador.
 - **Aceite:** respostas trazem os 4 headers; **o jogo ainda carrega** (three.js + web-llm WASM).
 - **Verificação:**
   ```bash
@@ -156,11 +151,11 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 ### SEC-04 · Versão do nginx exposta · [P2]
 
-- **Arquivo:** `docker/nginx.conf` (não define `server_tokens`)
-- **Evidência:** verificado: `curl -sI` → `Server: nginx/1.31.5` (versão **exata**).
+- **Arquivo:** `docker/nginx.conf` (a configuração inicial não definia `server_tokens`)
+- **Evidência histórica:** em 2026-10-02, `curl -sI` mostrou `Server: nginx/1.31.5`.
 - **Impacto:** baixo isoladamente, mas facilita o reconhecimento automático de versão vulnerável. É
   um item de 30 segundos.
-- **Mudança:** `server_tokens off;` no bloco `server` (some a versão; o header `Server: nginx` continua).
+- **Mudança aplicada:** `server_tokens off;` em `docker/nginx.conf` (some a versão; o header `Server: nginx` continua).
 - **Aceite:** `curl -sI` mostra `Server: nginx` sem versão.
 - **Verificação:**
   ```bash
@@ -169,14 +164,14 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 ### SEC-05 · `50x.html` no container sem origem no repo · [P2]
 
-- **Arquivo:** `Dockerfile:4`
+- **Arquivo:** `Dockerfile`
 - **Evidência:** o container em execução tem `50x.html` em `/usr/share/nginx/html/`, mas
   `ls` no repositório **não mostra** `50x.html` — ele não é `COPY` explicitamente, então vem de
   alguma camada anterior ou foi adicionado localmente e não commitado.
 - **Impacto:** arquivo **não rastreado** dentro do artefato de produção — o que o build entrega não
   corresponde ao que está no git. Dificulta reproduzir o container exatamente.
-- **Mudança:** (1) rastrear `50x.html` no repo **ou** removê-lo do build; (2) garantir que o
-  `Dockerfile` lista **exatamente** os arquivos que o repo contém (build reprodutível).
+- **Mudança aplicada:** Dockerfile copia somente `index.html` e `LICENSE`, e remove o `50x.html`
+  herdado da imagem base.
 - **Aceite:** os arquivos no container = os arquivos no repo; `git status` limpo após o build.
 - **Verificação:**
   ```bash
@@ -189,7 +184,7 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 ### BUG-01 · Plano aponta para caminho inexistente (`/tmp/rr-ai/game.mjs`) · [P1]
 
-- **Arquivo:** `PLANO-DE-MELHORIAS.md:46`
+- **Arquivo:** `PLANO-DE-MELHORIAS.md` (versão anterior)
 - **Evidência:**
   ```bash
   # Verificar sintaxe
@@ -200,14 +195,8 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 - **Impacto:** o comando de verificação do backlog **não roda** — quem seguir o plano recebe
   "Cannot find module" e não sabe o que fazer. Como é o plano **ativo** (o único curto e com status),
   é o primeiro que alguém executa.
-- **Mudança:** (1) corrigir para o comando real: `node --check` não se aplica a HTML; usar
-  ```bash
-  # verificar sintaxe do script embutido:
-  sed -n '/<script>/,/<\/script>/p' index.html | sed '1d;$d' > /tmp/game.mjs && node --check /tmp/game.mjs
-  # ou abrir o jogo e conferir o console (sem erro de sintaxe)
-  ```
-  (2) ou, mais simples, remover o comando e usar o teste de carregamento via browser;
-  (3) **garantir que o caminho não depende de `/tmp`**.
+- **Mudança aplicada:** `PLANO-DE-MELHORIAS.md` foi reescrito sem o caminho `/tmp/rr-ai/game.mjs`;
+  o CI extrai o módulo embutido para `/tmp` somente durante o job e roda `node --check` nele.
 - **Aceite:** o comando de verificação do plano **roda** e retorna 0.
 - **Verificação:**
   ```bash
@@ -216,13 +205,12 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 ### BUG-02 · `preview.png` (288 KB) no container sem função em produção · [P3]
 
-- **Arquivo:** `Dockerfile:4`
+- **Arquivo:** `Dockerfile`
 - **Evidência:** `COPY index.html preview.png LICENSE /usr/share/nginx/html/` — `preview.png`
   (288 KB) é a imagem de preview do repositório (aparece no README do GitHub), não usada pelo jogo.
 - **Impacto:** 288 KB desnecessários na imagem, servidos em `/preview.png` (confirmado `200`).
   Menor, mas é lixo em produção.
-- **Mudança:** remover `preview.png` do `Dockerfile` (manter no repo para o README); servindo o jogo,
-  a imagem de preview não é necessária.
+- **Mudança aplicada:** `preview.png` permanece no repositório para o README e saiu do Dockerfile.
 - **Aceite:** `/preview.png` não responde mais; a imagem do repo continua no GitHub (é outro caminho).
 - **Verificação:**
   ```bash
@@ -231,14 +219,14 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 ### BUG-03 · Cache não cobre `LICENSE` e favicon · [P2]
 
-- **Arquivo:** `docker/nginx.conf:9`
+- **Arquivo:** `docker/nginx.conf`
 - **Evidência:** a regra de cache é `location ~* \.(html|png|js|css)$` → `no-cache`. Não cobre
   `.ico`, `.json`, `.webmanifest`, e o `LICENSE` (sem extensão) cai no `location /` (fallback SPA).
 - **Impacto:** (a) favicon/manifesto podem receber **fallback HTML** com `Content-Type: text/html` —
   o navegador tenta interpretar o `index.html` como ícone e **não mostra ícone**; (b) `LICENSE`
   servido como HTML em vez de texto.
-- **Mudança:** (1) adicionar `location = /favicon.ico { try_files $uri =404; }` e um `favicon.ico`
-  real; (2) garantir que arquivos sem extensão (`/LICENSE`) sirvam como arquivo, não como fallback.
+- **Mudança aplicada:** `/LICENSE` tem `Content-Type: text/plain`; `/favicon.ico` ausente e caminhos
+  sem arquivo retornam 404, sem receber o HTML do jogo.
 - **Aceite:** `/favicon.ico` → `200` com `image/x-icon` (ou 404 limpo); `/LICENSE` → texto.
 - **Verificação:**
   ```bash
@@ -252,13 +240,12 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 ### IMP-01 · Sem CI (nem o build do container é validado) · [P2]
 
-- **Arquivo:** *(ausente)* `.github/workflows/`
-- **Evidência:** sem workflow. O único "build" é manual (`docker build`).
+- **Arquivo:** `.github/workflows/ci.yml`
+- **Evidência inicial:** não havia workflow; o único "build" era manual (`docker build`).
 - **Impacto:** nada garante que o container constrói, nem que o jogo não quebrou de sintaxe. Como é
   um arquivo único de 251 KB, um erro de sintaxe JS passa despercebido até alguém abrir o jogo.
-- **Mudança:** `ci.yml` com: (1) `docker build` (garante que a imagem constrói); (2) extrair o
-  `<script>` e rodar `node --check` (garante sintaxe); (3) opcionalmente, `curl` no container para
-  confirmar `200` em `/`.
+- **Mudança aplicada:** `.github/workflows/ci.yml` extrai o módulo embutido e roda `node --check`, depois
+  constrói a imagem Docker. O workflow ainda não foi executado no GitHub.
 - **Aceite:** PR com erro de sintaxe no JS **ou** Dockerfile quebrado é bloqueado.
 - **Verificação:**
   ```bash
@@ -269,14 +256,14 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 ### IMP-02 · Sem healthcheck no container · [P2]
 
 - **Arquivo:** `docker-compose.yml`
-- **Evidência:** `restart: unless-stopped` e `ports`, mas **sem `healthcheck`**.
+- **Evidência inicial:** `restart: unless-stopped` e `ports`, mas **sem `healthcheck`**.
 - **Impacto:** o orquestrador considera o container "são" desde que o processo do nginx esteja de pé —
   não valida que o jogo é servido corretamente. Um nginx que responde 502/404 por config errada fica
   "saudável".
-- **Mudança:** adicionar
+- **Mudança aplicada:** `docker-compose.yml` inclui
   ```yaml
   healthcheck:
-    test: ["CMD", "wget", "-qO-", "http://localhost/", "--spider"]
+    test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
     interval: 30s
     timeout: 3s
     retries: 3
@@ -290,9 +277,8 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 ### IMP-03 · `index.html` monolítico de 251 KB · [P3]
 
 - **Arquivo:** `index.html`
-- **Evidência:** 251 KB em um arquivo (verificado: `curl .../ | wc -c` → `251419`).
-- **Impacto:** diff ilegível (qualquer mudança muda o arquivo inteiro), sem cache granular por módulo,
-  e **sem SRI possível por arquivo local** sem reescrever.
+- **Evidência histórica:** o documento tinha 251 KB na análise de 2026-10-02.
+- **Impacto:** diffs maiores e sem cache granular por módulo.
 - **Mudança:** **não** é urgente (o jogo funciona). Se for escolhido: extrair o JS para `game.js`
   (o que também permite `Cache-Control` de longa duração e cache granular). Só depois que o resto
   estiver estável — é refactor, não correção.
@@ -305,15 +291,14 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 ### DOC-01 · Três docs de plano sem índice (qual está vigente?) · [P2]
 
-- **Arquivo:** `MELHORIAS-3D-E-IA.md` (28 KB), `MELHORIAS-LOOPING.md` (16 KB), `PLANO-DE-MELHORIAS.md` (1,6 KB)
-- **Evidência:** três documentos com sobreposição e sem indicador de qual é o vigente. O
+- **Arquivo:** `README.md` e documentos de melhorias
+- **Evidência inicial:** havia documentos com sobreposição e sem indicador de qual era o vigente. O
   `PLANO-DE-MELHORIAS.md` tem "Status Atual (01/10/2026)" e backlog — parece o ativo; os outros dois
   são grandes e de fases anteriores.
 - **Impacto:** quem chega não sabe por onde começar; itens podem ser **re-feitos** ou **perdidos**
   entre docs (o mesmo modo de falha de `site_corp`, que tem 11 docs — e por isso lá o item é `DOC-01`).
-- **Mudança:** (1) `README.md` (ou topo do `PLANO-DE-MELHORIAS.md`) com uma tabela: documento →
-  assunto → status (ativo/arquivado); (2) marcar os dois grandes como **histórico** e o curto como
-  **ativo**; (3) este `MELHORIAS.md` entra na tabela como "operação/segurança".
+- **Mudança aplicada:** `README.md` agora lista a finalidade/status dos quatro documentos e identifica
+  `MELHORIAS.md` + `PLANO-DE-MELHORIAS.md` como fontes operacionais atuais.
 - **Aceite:** um índice na raiz diz qual ler primeiro.
 - **Verificação:** `grep -n 'MELHORIAS' README.md` mostra a tabela.
 
@@ -333,11 +318,11 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 ### DOC-03 · Falta `SECURITY.md` · [P3]
 
-- **Arquivo:** *(ausente)* `SECURITY.md`
-- **Evidência:** tem `LICENSE` e README, sem guia de reporte.
+- **Arquivo:** `SECURITY.md`
+- **Evidência inicial:** havia `LICENSE` e README, sem guia de reporte.
 - **Impacto:** baixo (jogo estático, sem servidor de lógica), mas o `SEC-01` (supply chain do CDN) é
   um tema que deveria ficar registrado.
-- **Mudança:** criar com canal + a nota "dependências de CDN pinadas; SRI em andamento" (linkando `SEC-01`).
+- **Mudança aplicada:** `SECURITY.md` registra o escopo estático, o canal de reporte privado e o papel do SRI.
 - **Aceite:** arquivo existe.
 - **Verificação:** `ls SECURITY.md`
 
@@ -347,14 +332,14 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 ### DEVOPS-01 · Pin da imagem base do nginx · [P2]
 
-- **Arquivo:** `Dockerfile:1`
-- **Evidência:** `FROM nginx:alpine` — tag **sem versão**.
+- **Arquivo:** `Dockerfile`
+- **Evidência inicial:** `FROM nginx:alpine` — tag **sem versão**.
 - **Impacto:** (a) **não-reprodutibilidade**: o mesmo `docker build` em datas diferentes traz nginx
   diferente (foi o que trouxe `1.31.5` na versão testada — pode mudar a qualquer momento);
   (b) **supply chain**: `nginx:alpine` é tag móvel; um movimento de tag (ou conta upstream
   comprometida) muda o código que serve o jogo.
-- **Mudança:** pinar por tag de versão (`nginx:1.31.5-alpine`) ou, melhor, por **digest**
-  (`nginx@sha256:...`); registrar o digest no repositório.
+- **Mudança aplicada:** imagem pinada em `nginx:1.31.6-alpine3.24`. O pin por tag fixa a versão declarada;
+  ainda não fixa o digest imutável.
 - **Aceite:** rebuild 30 dias depois usa a mesma imagem base.
 - **Verificação:**
   ```bash
@@ -365,7 +350,7 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 ### DEVOPS-02 · Compose sem `read_only`/limites · [P3]
 
 - **Arquivo:** `docker-compose.yml`
-- **Evidência:** só `build`, `ports`, `restart`. Sem `read_only`, `security_opt`, `mem_limit` ou
+- **Evidência inicial:** só `build`, `ports`, `restart`. Sem `read_only`, `security_opt`, `mem_limit` ou
   `cap_drop`.
 - **Impacto:** baixo (nginx estático é inofensivo), mas `cap_drop: ALL` + `read_only: true` é
   hardening padrão de container web e custa 2 linhas.
@@ -384,7 +369,7 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 
 ## 8. Ordem de execução (waves)
 
-### Wave 1 — Supply chain e correção do plano (P0/P1)
+### Ordem original do diagnóstico (rastreabilidade)
 1. **`SEC-01`** — SRI nas tags CDN **ou** vendorizar `three.js`/`web-llm`.
 2. **`BUG-01`** — corrigir o comando de verificação do plano ativo (hoje não roda).
 3. **`DOC-02`** — commitar as mudanças pendentes (o jogo que roda ≠ o do git).
@@ -404,7 +389,10 @@ de 251 KB, servido por nginx em container. Sem build step, sem dependências de 
 ### Wave 4 — Polimento (P3)
 12. **`BUG-02`** (remover `preview.png` do container), **`IMP-03`** (dividir o HTML), **`DOC-03`**.
 
-**Dependências que não podem ser invertidas:**
+As mudanças de código dessas ondas foram aplicadas nesta rodada. A sequência abaixo registra as dependências
+consideradas. A validação em navegador/container continua pendente.
+
+**Dependências consideradas:**
 `SEC-01` antes de `SEC-03` (o CSP lista `script-src` conforme o que for vendorizado) ·
 `SEC-02` antes de `BUG-03` (definir o fallback primeiro, depois os assets especiais) ·
 `DOC-02` é o primeiro de todos — **commitar antes de mexer** em qualquer coisa, senão o trabalho
@@ -439,30 +427,30 @@ novo se mistura com o que já estava em andamento.
 ## 10. Definição de pronto (DoD)
 
 **Segurança**
-- [ ] `SEC-01` — tags CDN com `integrity` (ou libs vendorizadas, sem CDN)
-- [ ] `SEC-02` — `/.git/config` e `/package.json` → **404** (não soft-200)
-- [ ] `SEC-03` — `X-Frame-Options`, `CSP`, `nosniff`, `Referrer-Policy` presentes; jogo **funciona**
-- [ ] `SEC-04` — `Server:` sem número de versão
-- [ ] `SEC-05` — arquivos no container = arquivos no repo
+- [x] `SEC-01` — hashes SRI declarados no import map para os módulos CDN usados; aceite de navegador pendente
+- [x] `SEC-02` — Nginx configurado para 404 em caminhos inexistentes
+- [x] `SEC-03` — CSP e headers de segurança configurados; compatibilidade em navegador pendente
+- [x] `SEC-04` — `server_tokens off` configurado; resposta HTTP pendente de verificação
+- [x] `SEC-05` — Dockerfile copia apenas os arquivos previstos e remove o `50x.html` herdado
 
 **Funcional**
-- [ ] `BUG-01` — comando de verificação do plano **roda** (não aponta para `/tmp`)
-- [ ] `BUG-02` — `preview.png` fora do container
-- [ ] `BUG-03` — `/favicon.ico` com `image/x-icon`; `/LICENSE` como texto
+- [x] `BUG-01` — plano atualizado; CI extrai o módulo embutido para checar sintaxe
+- [x] `BUG-02` — `preview.png` removido da imagem Docker
+- [x] `BUG-03` — `/LICENSE` configurado como texto e caminhos sem arquivo retornam 404
 
 **Qualidade e operação**
-- [ ] `IMP-01` — CI faz `docker build` + `node --check` do JS embutido
-- [ ] `IMP-02` — healthcheck ativo (`docker inspect` → `healthy`)
+- [x] `IMP-01` — workflow definido com `docker build` + `node --check`; publicação/execução pendente
+- [x] `IMP-02` — healthcheck definido no Compose; aceite em container pendente
 - [ ] `IMP-03` — (P3) HTML dividido, se decidido
 
-**Documentação**
-- [ ] `DOC-01` — índice dos docs na raiz
-- [ ] `DOC-02` — `git status` limpo
-- [ ] `DEVOPS-01` — imagem base pinada (tag/digest)
-- [ ] `DEVOPS-02` — container com `read_only` + `cap_drop`
-- [ ] `DOC-03` — `SECURITY.md`
+**Documentação e operação**
+- [x] `DOC-01` — índice dos documentos na raiz
+- [ ] `DOC-02` — checkpoint commitado e working tree limpo
+- [x] `DEVOPS-01` — imagem base pinada por versão/tag (digest ainda não fixado)
+- [x] `DEVOPS-02` — Compose com `read_only`, capabilities reduzidas e `no-new-privileges`
+- [x] `DOC-03` — `SECURITY.md`
 
-**Validação final:**
+**Aceites em runtime pendentes (não executados nesta rodada):**
 ```bash
 docker build -t rr:test .
 docker run -d --name rrtest -p 8091:80 rr:test && sleep 3
@@ -475,6 +463,6 @@ git status --porcelain   # 0
 
 ---
 
-*Fim do plano. Gerado por leitura do código **e execução real** (container construído, subido e
+*Fim do diagnóstico-base. Gerado por leitura do código **e execução real** (container construído, subido e
 testado por `curl`) em 2026-10-02. Consolida `MELHORIAS-3D-E-IA.md`, `MELHORIAS-LOOPING.md` e
 `PLANO-DE-MELHORIAS.md` — que **não** foram repetidos aqui.*

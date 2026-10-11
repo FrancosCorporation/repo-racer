@@ -198,6 +198,7 @@
     <div class="row"><span>MELHOR VOLTA</span><span id="loop-best">--</span></div>
     <div class="row"><span>VOLTAS NA SESSÃO</span><span id="loop-laps">0</span></div>
     <div class="row" id="brain-hud-row" style="display: none"><span>CÉREBRO</span><span id="brain-hud">--</span></div>
+    <div class="row" id="rival-count-row" style="display: none"><span>RIVAIS ATIVOS</span><span id="rival-count">0/0</span></div>
     <div id="nitro-wrap"><div id="nitro"></div></div>
   </div>
   <div id="way" class="box">
@@ -279,11 +280,29 @@
   </div>
 </div>
 
+<!-- SRI cobre os imports do Three.js e o bundle WebLLM; atualize hashes ao trocar as URLs pinadas. -->
 <script type="importmap">
 {
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  },
+  "integrity": {
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js": "sha384-61S/Nu32S3E5+n+KpCOTb2eRYps6fVKm+9Gz1QBvSePFthb46f063Aa/qe/lykFZ",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/geometries/RoundedBoxGeometry.js": "sha384-S52/WAm3DaIIFna675h5dmavqea/akLlPFtPdnzgWWhnz+/nMqR6PPsSXPOd8Gpw",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js": "sha384-L+Ns9skCAqjab7aG8LH5VLknBCoENW7p37sOj39jnITwlWZFabWc29JwzgYf6ygy",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/RenderPass.js": "sha384-LwKrkOBAkmQ2KT4cv6P6q9Rb9L01GIFU34Zp16tGWZoBnrVuujfjpYZb7OxEMb0J",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js": "sha384-R734/7SvtqjjeteDKG4qcQA0adDCZ1ZcKfYUZsbVr9qqHGlgSXH9eNN4b3NIgwuc",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js": "sha384-zetU6HhR/vTtgSvnS9DE+GQPZhVT/ZOSLa/1+DSM6rkM9hvBgQWr9bCEosZt93ch",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/OutputPass.js": "sha384-RJJc+pg+Ue2ZwXlf8n78cPHMiHrqfr+AxxabF5vkXMXjNPF6nSUoqb20IQXkMo6c",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/SMAAPass.js": "sha384-KMSgC3atgu0arTMGveWOKuCxZdEbhymfjmW5QAg5Mocen0rPsHjqeHzl+YvV5HzJ",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/shaders/CopyShader.js": "sha384-kzVlcj2amFaRNIWZ5zE0PmIN+QTNWWvrgKk31S8N/7w0nf7Qq3xqxHRLbD2UPPSl",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/MaskPass.js": "sha384-SDM80tiGflO8UDV/QzR/mASjcc/+wF7KfRVFNHJUIPcTctwoPI8GoWVTlccZw7V4",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/Pass.js": "sha384-gSqIFh8vMmp1veyOysIS3KPVUl/A5JPefYvW4b89OeYeW0bwkrjN7qcC1h0XJK/K",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/shaders/LuminosityHighPassShader.js": "sha384-621kiA/kIdX8rtH6VU6+SwMVx+B8g7MQ6x0fei5dZVX3CQZSLkpOlglIk9sxE+/g",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/shaders/OutputShader.js": "sha384-fT4woAJJtXcAxElHG1cGfIZkiSxaj7u+24LHlfNVDZZ9aSjZvr2emMGPmcD9eF0V",
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/shaders/SMAAShader.js": "sha384-gKkT3VUEC3lcM7aeYOfRRpYwB11FQYcpoV7hTu9c8E+Trmmzd1oOO5iwFoGFMKv/",
+    "https://esm.run/@mlc-ai/web-llm@0.2.85": "sha384-Mm7dSY3nLApwqmDSJX02YC/z4n0VrQYtYZn1tFGEJX9VhYDj82F1cfKbthC8Pjpu"
   }
 }
 </script>
@@ -471,8 +490,8 @@ sun.shadow.camera.right = SHADOW_HALF;
 sun.shadow.camera.top = SHADOW_HALF;
 sun.shadow.camera.bottom = -SHADOW_HALF;
 sun.shadow.camera.updateProjectionMatrix();
-sun.shadow.bias = -0.0004;
-sun.shadow.normalBias = 0.02;
+sun.shadow.bias = 0.0005;
+sun.shadow.normalBias = 0.04;
 sun.target.position.set(0, 0, 0);
 scene.add(sun);
 scene.add(sun.target);
@@ -600,16 +619,18 @@ roadTexH.repeat.set(12, 1);
 const roadMatV = new THREE.MeshStandardMaterial({ map: roadTexV, roughness: 0.85, metalness: 0.12, envMapIntensity: 0.6 });
 const roadMatH = new THREE.MeshStandardMaterial({ map: roadTexH, roughness: 0.85, metalness: 0.12, envMapIntensity: 0.6 });
 // guias neon nas bordas das ruas: dao profundidade e guiam o olho pela cidade
-const curbMat = new THREE.MeshBasicMaterial({ color: 0x0d5f78, toneMapped: false });
+const curbMat = new THREE.MeshStandardMaterial({ color: 0x0d5f78, roughness: 0.82, metalness: 0.1, envMapIntensity: 0.4 });
 const curbGeoNS = new THREE.BoxGeometry(0.32, 0.07, 480);
 const curbGeoEW = new THREE.BoxGeometry(480, 0.07, 0.32);
 for (const r of ROADS) {
   for (const side of [-1, 1]) {
     const ns = new THREE.Mesh(curbGeoNS, curbMat);
     ns.position.set(r + side * 5.9, 0.035, 0);
+    ns.castShadow = true;
     scene.add(ns);
     const ew = new THREE.Mesh(curbGeoEW, curbMat);
     ew.position.set(0, 0.035, r + side * 5.9);
+    ew.castShadow = true;
     scene.add(ew);
   }
 }
@@ -631,7 +652,7 @@ for (const r of ROADS) {
 {
   const crossGeo = new THREE.PlaneGeometry(1.1, 7.2);
   crossGeo.rotateX(-Math.PI / 2);
-  const crossMat = new THREE.MeshBasicMaterial({ color: 0xd9e8f5, transparent: true, opacity: 0.34, toneMapped: false, depthWrite: false });
+  const crossMat = new THREE.MeshStandardMaterial({ color: 0xd9e8f5, roughness: 0.75, metalness: 0.15, envMapIntensity: 0.3, transparent: true, opacity: 0.34, depthWrite: false });
   const crosswalks = [];
   for (const rx of ROADS) for (const rz of ROADS) {
     // travessia sobre a rua VERTICAL (faixas deitadas, z = rz ± 8.3)
@@ -713,6 +734,74 @@ for (const r of ROADS) {
     scene.add(p);
     puddlePlaced++;
   }
+}
+
+/* --- E5: detalhes de rua — tampas de esgoto e barras de parada nas
+   esquinas (2 draw calls via InstancedMesh). PRNG LOCAL de proposito:
+   consumir o rand() global aqui mudaria o layout dos predios (que vem
+   depois) e invalidaria todos os caminhos ja validados pela IA. --- */
+{
+  const mhCanvas = document.createElement('canvas');
+  mhCanvas.width = mhCanvas.height = 64;
+  const mc = mhCanvas.getContext('2d');
+  mc.fillStyle = '#232c3d';
+  mc.fillRect(0, 0, 64, 64);
+  mc.strokeStyle = '#5a708f';
+  mc.lineWidth = 4;
+  mc.beginPath(); mc.arc(32, 32, 27, 0, Math.PI * 2); mc.stroke();
+  mc.lineWidth = 2;
+  for (let rr = 9; rr <= 21; rr += 6) { mc.beginPath(); mc.arc(32, 32, rr, 0, Math.PI * 2); mc.stroke(); }
+  mc.strokeStyle = '#44546c';
+  mc.lineWidth = 5;
+  mc.beginPath(); mc.moveTo(12, 32); mc.lineTo(52, 32); mc.moveTo(32, 12); mc.lineTo(32, 52); mc.stroke();
+  // filete neon (mesmo ciano das guias de meio-fio) — a tampa "existir" a noite
+  mc.strokeStyle = '#2f9fbe';
+  mc.lineWidth = 2;
+  mc.beginPath(); mc.arc(32, 32, 30, 0, Math.PI * 2); mc.stroke();
+  const mhTex = new THREE.CanvasTexture(mhCanvas);
+  mhTex.colorSpace = THREE.SRGBColorSpace;
+  const mhGeo = new THREE.CircleGeometry(1.1, 24);
+  mhGeo.rotateX(-Math.PI / 2);
+  const mhMat = new THREE.MeshStandardMaterial({ map: mhTex, roughness: 0.58, metalness: 0.7, envMapIntensity: 0.55, emissive: 0x0e3a4a, emissiveIntensity: 0.12 });
+  let mhSeed = 0x51ee7;
+  const mhr = () => { mhSeed = (mhSeed * 1664525 + 1013904223) >>> 0; return mhSeed / 4294967296; };
+  const holes = [];
+  const midBlocks = [-196, -120, -40, 40, 120, 196]; // um por faixa de quarteirao
+  for (const r of ROADS) {
+    for (const z of midBlocks) holes.push([r + (mhr() - 0.5) * 4.4, z + (mhr() - 0.5) * 16, 0]);
+    for (const x of midBlocks) holes.push([x + (mhr() - 0.5) * 16, r + (mhr() - 0.5) * 4.4, 1]);
+  }
+  const mhMesh = new THREE.InstancedMesh(mhGeo, mhMat, holes.length);
+  const e5d = new THREE.Object3D();
+  holes.forEach(([hx, hz], i) => {
+    e5d.position.set(hx, 0.021, hz);
+    e5d.rotation.set(0, 0, 0);
+    e5d.updateMatrix();
+    mhMesh.setMatrixAt(i, e5d.matrix);
+  });
+  scene.add(mhMesh);
+
+  // barras de parada: 4 aproximacoes por cruzamento (25 cruzamentos = 100)
+  const barGeo = new THREE.PlaneGeometry(8, 0.55);
+  barGeo.rotateX(-Math.PI / 2);
+  const barMat = new THREE.MeshStandardMaterial({ color: 0xd9e8f5, roughness: 0.6, metalness: 0.25, envMapIntensity: 0.4, transparent: true, opacity: 0.55, depthWrite: false });
+  const bars = [];
+  for (const rx of ROADS) for (const rz of ROADS) {
+    // zebra ocupa rz±4,7..11,9 (profundidade 7,2) — barra 0,8 m antes dela
+    bars.push([rx, rz - 12.7, 0]);   // aproximacao sul (rua vertical)
+    bars.push([rx, rz + 12.7, 0]);   // aproximacao norte
+    bars.push([rx - 12.7, rz, Math.PI / 2]); // oeste (rua horizontal)
+    bars.push([rx + 12.7, rz, Math.PI / 2]); // leste
+  }
+  const barMesh = new THREE.InstancedMesh(barGeo, barMat, bars.length);
+  bars.forEach(([bx, bz, rot], i) => {
+    e5d.position.set(bx, 0.03, bz);
+    e5d.rotation.set(0, rot, 0);
+    e5d.updateMatrix();
+    barMesh.setMatrixAt(i, e5d.matrix);
+  });
+  barMesh.renderOrder = 1;
+  scene.add(barMesh);
 }
 
 /* Fachada procedural. Antes: so janelas soltas sobre fundo 100% preto — de
@@ -834,7 +923,7 @@ const BLOCKS = [];
 // materiais de detalhe de topo (declarados antes de addBuilding: a funcao roda
 // durante a geracao dos quarteiroes, e const em TDZ daria ReferenceError)
 const roofMat = new THREE.MeshStandardMaterial({ color: 0x1c2530, roughness: 0.6, metalness: 0.5 });
-const antennaMat = new THREE.MeshBasicMaterial({ color: 0xff4d5e, toneMapped: false });
+const antennaMat = new THREE.MeshStandardMaterial({ color: 0xff4d5e, roughness: 0.7, metalness: 0.3, emissive: 0xff4d40, emissiveIntensity: 0.2 });
 const antennaTips = []; // piscam em modo alarme no update
 for (const bx of [-120, -40, 40, 120]) {
   for (const bz of [-120, -40, 40, 120]) BLOCKS.push([bx, bz]);
@@ -1937,7 +2026,15 @@ function setGateActive(i) {
 
 /* --- rivais da fase de caca --- */
 const enemies = [];
+const rivalCountRow = document.getElementById('rival-count-row');
+const rivalCountEl = document.getElementById('rival-count');
 const ENEMY_SPEED = { stalk: 22, telegraph: 4, charge: 38, recover: 2 };
+function paintRivalCount() {
+  if (!rivalCountRow || !rivalCountEl) return;
+  const show = phaseState.active && phaseState.def?.type === 'chase';
+  rivalCountRow.style.display = show ? 'flex' : 'none';
+  if (show) rivalCountEl.textContent = `${enemies.reduce((n, e) => n + (e.alive ? 1 : 0), 0)}/${enemies.length}`;
+}
 // multiplicador de agressividade da cacada conforme a dificuldade escolhida
 function chaseAggr() {
   return phaseState.active && phaseState.def && phaseState.def.type === 'chase' && DIFFS[phaseState.diff] ? DIFFS[phaseState.diff].mult : 1;
@@ -2013,8 +2110,9 @@ function spawnEnemies(def) {
     mesh.position.set(x, 0, z);
     const heading = a + Math.PI;
     mesh.rotation.y = heading;
-    enemies.push({ mesh, x, z, heading, moveH: heading, speed: 0, hp: phaseState.diff >= 2 ? 4 : 3, mode: 'stalk', modeT: 2.4 + i * 0.8, hitCd: 0, alive: true, lean: 0, flashT: 0, flank: i * 2.4, dir: i % 2 ? 1 : -1, holdT: 0, role: i === 0 ? 'bloqueador' : 'perseguidor', idx: i, wpT: 0.5 + i * 0.4, stuckT: 0 });
+    enemies.push({ mesh, x, z, heading, moveH: heading, speed: 0, hp: phaseState.diff >= 2 ? 4 : 3, mode: 'stalk', modeT: 2.4 + i * 0.8, hitCd: 0, alive: true, lean: 0, flashT: 0, flank: i * 2.4, dir: i % 2 ? 1 : -1, holdT: 0, role: i === 0 ? 'bloqueador' : 'perseguidor', idx: i, wpT: 0.5 + i * 0.4, stuckT: 0, thinkT: 0, losStreak: 0 });
   }
+  paintRivalCount();
 }
 function clearEnemies() {
   for (const e of enemies) {
@@ -2022,6 +2120,7 @@ function clearEnemies() {
     if (e.mesh.userData.blob) scene.remove(e.mesh.userData.blob); // sombra fake sai junto
   }
   enemies.length = 0;
+  paintRivalCount();
 }
 function hurtPlayerInPhase() {
   if (invulnT > 0) return;
@@ -2044,7 +2143,9 @@ function nearestRoad(v) {
   return best;
 }
 function streetPathTo(x, z, tx, tz) {
-  const cx = nearestRoad(x), cz = nearestRoad(z);
+  /* coluna/rua mais perto na DIREÇÃO DO ALVO: antes pegava a rua vizinha mesmo
+     em contramão e o caçador dava meia-volta p/ retornar (loop de waypoints) */
+  const cx = roadToward(x, tx), cz = roadToward(z, tz);
   const txr = nearestRoad(tx), tzr = nearestRoad(tz);
   const raw = [[cx, cz], [txr, cz], [txr, tzr]];
   const pts = [];
@@ -2054,6 +2155,25 @@ function streetPathTo(x, z, tx, tz) {
   }
   return pts;
 }
+/* rua (eixo) mais próxima de v que esteja a caminho de t; só cai na contramão
+   se não houver nenhuma no lado do alvo (com penalidade p/ desempate) */
+function roadToward(v, t) {
+  let best = nearestRoad(v), bd = 1e9;
+  for (const r of ROADS) {
+    const toward = (t - v) * (r - v) >= 0;
+    const d = Math.abs(r - v) + (toward ? 0 : 500);
+    if (d < bd) { bd = d; best = r; }
+  }
+  return best;
+}
+/* dentro do quarteirão: rumo ao eixo de rua mais próximo (senão a "rota"
+   corta prédio e ele guinca no muro em loop) */
+function streetHeading(o) {
+  const nrx = nearestRoad(o.x), nrz = nearestRoad(o.z);
+  const rx = Math.abs(o.x - nrx), rz = Math.abs(o.z - nrz);
+  if (rx <= 8 || rz <= 8) return null; // já tá no asfalto
+  return rx <= rz ? Math.atan2(nrx - o.x, 0) : Math.atan2(0, nrz - o.z);
+}
 function wpNext(o) {
   while (o.wp && o.wp.length && Math.hypot(o.wp[0][0] - o.x, o.wp[0][1] - o.z) < 7) o.wp.shift();
   return o.wp && o.wp.length ? o.wp[0] : null;
@@ -2062,6 +2182,10 @@ function updateEnemies(dt) {
   for (const e of enemies) {
     if (!e.alive) continue;
     const aggr = chaseAggr();
+    /* velocidade calibrada: o multiplicador de PONTOS (1/2/3) era aplicado cru
+       — no médio o rival ia a 44/76 u/s e capotava nas curvas. Agora 1/1,5/2
+       com teto (stalk 46, carga 60): pressão de verdade, sem foguete desgovernado */
+    const aggrV = 1 + (aggr - 1) * 0.65;
     e.hitCd = Math.max(0, e.hitCd - dt);
     e.flashT = Math.max(0, e.flashT - dt);
     const dx = car.position.x - e.x, dz = car.position.z - e.z;
@@ -2071,7 +2195,11 @@ function updateEnemies(dt) {
     // linha reta nao escapa mais
     const cSpd = Math.abs(state.speed);
     const pvx = Math.sin(state.moveH) * cSpd, pvz = Math.cos(state.moveH) * cSpd;
-    const closeIn = dist / Math.max(12, ENEMY_SPEED.stalk * aggr);
+    /* IA SEM CEGUEIRA (igual ao SEGV): só carrega com linha de visão do CARRO
+       (3 linhas); sem visão segue a grade — fim do "atola no prédio" */
+    const losNow = losCar(e.x, e.z, car.position.x, car.position.z);
+    e.losStreak = losNow ? (e.losStreak || 0) + dt : 0; // visão estável 0,3 s
+    const closeIn = dist / Math.max(12, ENEMY_SPEED.stalk * aggrV);
     /* C2: papéis — o bloqueador (i=0) corta o caminho e mira ADIANTE do jogador;
        os perseguidores ficam atrás/colados (lead menor) e flanqueiam */
     const lead = clamp(closeIn, 0, 2.2) * (e.role === 'bloqueador' ? 1.45 : 0.6);
@@ -2082,37 +2210,80 @@ function updateEnemies(dt) {
     if (e.mode === 'stalk') {
       /* C1: rota pela grade recalculada periodicamente (custo O(3)) */
       e.wpT -= dt;
-      if (e.wpT <= 0) { e.wpT = 1.6 + (e.idx || 0) * 0.15; e.wp = streetPathTo(e.x, e.z, car.position.x, car.position.z); }
-      if (dist > 24) {
-        // longe: segue o asfalto ate a esquina certa (nao atola no quarteirao)
-        const wp = wpNext(e);
-        const wantWp = wp ? Math.atan2(wp[0] - e.x, wp[1] - e.z) : want;
-        e.heading = turnToward(e.heading, wantWp, turn, dt);
-      } else {
-        // perto: flanqueio (todos os rivais miram num ponto deslocado pra um lado)
+      if (e.wpT <= 0) { e.wpT = 1.6 + (e.idx || 0) * 0.15; e.wp = streetPathTo(e.x, e.z, tx, tz); }
+      const wp = wpNext(e);
+      const evade = avoidBuildings(e, dt, 7 + e.speed * 0.45, 3.2);
+      if (dist > 24 || !losNow) {
+        // longe OU sem visão: rua mais próxima se dentro do quarteirão, senão
+        // segue o asfalto até a esquina certa (nao atola no predio)
+        const sh = streetHeading(e);
+        const wantWp = sh !== null ? sh
+          : wp ? Math.atan2(wp[0] - e.x, wp[1] - e.z)
+          : Math.atan2(nearestRoad(car.position.x) - e.x, nearestRoad(car.position.z) - e.z);
+        if (!evade) e.heading = turnToward(e.heading, wantWp, turn, dt);
+      } else if (!evade) {
+        // perto e enxergando: flanqueio (aim num ponto deslocado pra um lado)
         e.flank += dt * 0.9 * (e.dir || 1);
         const fAng = want + clamp(Math.sin(e.flank), -1, 1) * clamp((dist - 8) / 40, 0, 1) * 0.9;
         e.heading = turnToward(e.heading, fAng, turn, dt);
       }
-      // cerebro (opcional): o lider da matilha pode escolher a tatica antes de carregar
-      if (e.modeT <= 0 && !brainTryDecideEnemy(e)) { e.mode = 'telegraph'; e.modeT = 0.8; tone(660, 0.1, { gain: 0.05 }); }
+      // cerebro (opcional): o lider da matilha escolhe a tatica antes de carregar
+      if (e.modeT > 0.5 && dist < 60 && (e.losStreak > 0.3 || dist < 30)) e.modeT = 0.5; // visão estável OU colado: adianta
+      if (e.modeT <= 0) {
+        if (e.thinkT > 0) e.thinkT -= dt; // decisão em voo: segue caçando
+        else if (!brainTryDecideEnemy(e)) {
+          /* perto (dist<60) E enxergando vira telegraph; colado (<30) telegrapha
+             mesmo sem visão (investida ainda exige LOS no fim) — sem isso o
+             rival ficava preso só em stalk pairando a 20-30m do jogador */
+          if (dist < 10 || (dist < 60 && (e.losStreak > 0.3 || dist < 30))) { e.mode = 'telegraph'; e.modeT = 0.8; tone(660, 0.1, { gain: 0.05 }); }
+          else {
+            AILog.rival = AILog.rival || { tries: 0, los: 0, d: 0 };
+            AILog.rival.tries++; if (losNow) AILog.rival.los++; AILog.rival.d += dist;
+            AILog.rper = AILog.rper || {};
+            const rs = AILog.rper[e.idx] = AILog.rper[e.idx] || { t: 0, l: 0, d: 0, min: 1e9 };
+            rs.t++; if (losNow) rs.l++; rs.d += dist; rs.min = Math.min(rs.min, dist);
+            e.modeT = 0.8;
+          }
+        }
+      }
     } else if (e.mode === 'telegraph') {
       turn = 2.6;
       e.heading = turnToward(e.heading, want, turn, dt);
-      if (e.modeT <= 0) { e.mode = 'charge'; e.modeT = 1.5; e.heading = want; }
+      if (e.modeT <= 0) {
+        if (dist > 75) { e.mode = 'stalk'; e.modeT = 0.8; } // escapou longe: volta pra caça
+        else if ((dist < 10 || e.losStreak > 0.3 || (losNow && dist < 40)) && (dist < 10 || !circleHitsBuilding(e.x, e.z, 6.5))) { e.mode = 'charge'; e.modeT = 1.5; e.heading = want; }
+        else { e.mode = 'stalk'; e.modeT = 0.9; } // juke: sumiu atrás do prédio
+      }
     } else if (e.mode === 'charge') {
       turn = 1.2; accel = 70;
-      e.heading = turnToward(e.heading, want, turn, dt);
-      // ja passou pelo alvo (afastando-se)? encerra a carga antes de atolar longe
-      const vx = Math.sin(e.moveH) * e.speed, vz = Math.cos(e.moveH) * e.speed;
-      if (dx * vx + dz * vz < 0 || e.modeT <= 0) { e.mode = 'recover'; e.modeT = 2.2; }
+      const rlook = 6 + e.speed * 0.55;
+      if (!losNow && dist > 10) {
+        // perdeu o alvo no meio da carga: freia em vez de atravessar o quarteirão
+        e.mode = 'recover'; e.modeT = 1.4;
+        spawnSparks(e.x + Math.sin(e.moveH) * 3, e.z + Math.cos(e.moveH) * 3, 3);
+      } else if (!losClear(e.x, e.z, e.x + Math.sin(e.moveH) * rlook, e.z + Math.cos(e.moveH) * rlook, 3.4) && dist > 10) {
+        // rota do carro bate em parede mesmo com alvo visível: freia seco
+        e.mode = 'recover'; e.modeT = 1.4;
+        e.speed = Math.min(e.speed, 12);
+        spawnSparks(e.x + Math.sin(e.moveH) * 3, e.z + Math.cos(e.moveH) * 3, 3);
+      } else {
+        // mira o ponto ANTECIPADO só se ele também estiver sem prédio
+        const aimOK = losCar(e.x, e.z, tx, tz);
+        const aX = aimOK ? tx : car.position.x, aZ = aimOK ? tz : car.position.z;
+        e.heading = turnToward(e.heading, Math.atan2(aX - e.x, aZ - e.z), turn, dt);
+        // ja passou pelo alvo (afastando-se)? encerra a carga antes de atolar longe
+        const vx = Math.sin(e.moveH) * e.speed, vz = Math.cos(e.moveH) * e.speed;
+        if (dx * vx + dz * vz < 0 || e.modeT <= 0) { e.mode = 'recover'; e.modeT = 1.6; }
+      }
     } else if (e.modeT <= 0) {
       e.mode = 'stalk';
       e.modeT = Math.max(1.2, 3 + rand() * 2 - (aggr - 1));
       e.flank = rand() * Math.PI * 2;
     }
     e.holdT = Math.max(0, (e.holdT || 0) - dt); // tática SEGURAR do cerebro
-    const target = ENEMY_SPEED[e.mode] * (e.mode === 'stalk' || e.mode === 'charge' ? aggr : 1) * (e.holdT > 0 ? 0.6 : 1);
+    const vBase = ENEMY_SPEED[e.mode];
+    const vCap = e.mode === 'charge' ? 60 : e.mode === 'stalk' ? 46 : 1e9;
+    const target = Math.min(vBase * (e.mode === 'stalk' || e.mode === 'charge' ? aggrV : 1), vCap) * (e.holdT > 0 ? 0.6 : 1);
     e.speed += clamp(target - e.speed, -70 * dt, accel * dt);
     e.moveH = turnToward(e.moveH, e.heading, turn * 0.6, dt);
     const peX = e.x, peZ = e.z; // B2: referencia p/ medir deslize/atolamento
@@ -2121,6 +2292,7 @@ function updateEnemies(dt) {
     if (Math.abs(e.x) > WORLD_BOUND) { e.x = Math.sign(e.x) * WORLD_BOUND; e.speed *= 0.3; }
     if (Math.abs(e.z) > WORLD_BOUND) { e.z = Math.sign(e.z) * WORLD_BOUND; e.speed *= 0.3; }
     /* B2: colisão com DESLIZE (antes o clamp por eixo grudava no canto) + unstick */
+    let hitWall = null;
     for (const bl of buildings) {
       const px = e.x - bl.x, pz = e.z - bl.z;
       const ox = 1.6 + bl.w / 2 - Math.abs(px);
@@ -2134,6 +2306,7 @@ function updateEnemies(dt) {
           e.heading += (Math.sin(e.moveH) >= 0 ? -1 : 1) * Math.sign(px || 1) * Math.min(0.5, 0.14 + oz * 0.4);
         }
         e.speed *= 0.6;
+        hitWall = bl;
         break;
       }
     }
@@ -2147,6 +2320,20 @@ function updateEnemies(dt) {
       e.mode = 'stalk'; e.modeT = 1.2;
       spawnSmoke(e.x, e.z);
     }
+    /* SOLDADO NO PRÉDIO: colisão todo frame com velocidade de equilíbrio baixa
+       (empurra-empurra ~2 u/s) — o stuckT antigo exigia speed>4 e nunca
+       disparava; o rival ficava congelado pra sempre (r2: 45s parado em
+       (-22,151)). Agora 0,55s de contato contínuo = sai andando pra fora. */
+    if (hitWall) {
+      e.contactT = (e.contactT || 0) + dt;
+      if (e.contactT > 0.55) {
+        e.contactT = 0;
+        e.heading = e.moveH = Math.atan2(e.x - hitWall.x, e.z - hitWall.z);
+        e.speed = 14;
+        e.mode = 'stalk'; e.modeT = 1.2;
+        spawnSmoke(e.x, e.z);
+      }
+    } else e.contactT = 0;
     /* C2: separação boids-lite — a matilha não empilha (custo O(n²) com n<=5) */
     for (const o of enemies) {
       if (o === e || !o.alive) continue;
@@ -2177,11 +2364,11 @@ function updateEnemies(dt) {
       eb.position.set(e.x, 0.05, e.z);
     }
     if (e.flashT > 0) e.mesh.position.y = 0.12 + Math.sin(e.flashT * 60) * 0.06;
-    if (dist < 3.6 && e.hitCd <= 0) {
+    if (dist < 4.2 && e.hitCd <= 0) {
       e.hitCd = 0.9;
       const nx = dx / dist, nz = dz / dist;
-      car.position.x += nx * (3.6 - dist);
-      car.position.z += nz * (3.6 - dist);
+      car.position.x += nx * (4.2 - dist);
+      car.position.z += nz * (4.2 - dist);
       if (e.mode === 'recover') {
         e.hp -= 1;
         e.flashT = 0.3;
@@ -2194,6 +2381,7 @@ function updateEnemies(dt) {
           e.mesh.visible = false;
           if (e.mesh.userData.blob) e.mesh.userData.blob.visible = false;
           spawnSmoke(e.x, e.z);
+          paintRivalCount();
           toast('RIVAL DESTRUIDO!  +350', '#ffd54f');
         } else {
           toast('RIVAL VULNERAVEL!  +350');
@@ -2471,7 +2659,7 @@ for (const sx of [-0.99, 0.99]) {
   carBody.add(skirt);
 }
 // fita de neon nas saias laterais (a cor acompanha o carro escolhido)
-const underglowMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, toneMapped: false, transparent: true, opacity: 0.9 });
+const underglowMat = new THREE.MeshStandardMaterial({ color: 0x00e5ff, roughness: 0.3, metalness: 0.4, emissive: 0x00e5ff, emissiveIntensity: 0.8, transparent: true, opacity: 0.9 });
 for (const sx of [-1.02, 1.02]) {
   const strip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 2.4), underglowMat);    strip.position.set(sx, 0.22, 0);
     carBody.add(strip);
@@ -2832,7 +3020,7 @@ function spawnSmoke(x, z) {
   s.sprite.material.opacity = 0.5;
 }
 
-const BOSS_CFG = { hp: 100, time: 90, contact: 4.2, stalkSpeed: 24, chargeSpeed: 46, flanking: true };
+const BOSS_CFG = { hp: 100, time: 90, contact: 5.0, stalkSpeed: 24, chargeSpeed: 46, flanking: true };
 // stats por dificuldade escolhida (soma por cima do BOSS_CFG)
 function bossStats() {
   const D = DIFFS[phaseState.diff] || DIFFS[1];
@@ -2841,7 +3029,7 @@ function bossStats() {
     stalk: BOSS_CFG.stalkSpeed * D.bossSpeed,
     charge: BOSS_CFG.chargeSpeed * D.bossSpeed,
     telegraphT: 0.9 * D.bossTelegraph,
-    stalkT: 3.5 * D.bossTelegraph
+    stalkT: 2.8 * D.bossTelegraph
   };
 }
 /* --- desvio de predios ---
@@ -2856,24 +3044,72 @@ function circleHitsBuilding(px, pz, r) {
   }
   return null;
 }
-function bossAvoid(b, dt) {
-  const look = 8 + b.speed * 0.5, r = 4.5;
+/* IA: linha de visão pura — segmento vs AABB dos prédios (slab). O SEGV e os
+   rivais SÓ carregam quando enxergam o alvo; sem visão seguem pela grade de
+   ruas. Resolve o "só bate em prédio": nenhuma investida atravessa quarteirão. */
+function losClear(x1, z1, x2, z2, m = 3.6) {
+  const dx = x2 - x1, dz = z2 - z1;
+  for (const bl of buildings) {
+    const hx = bl.w * 0.5 + m, hz = bl.d * 0.5 + m;
+    let t0 = 0, t1 = 1;
+    if (Math.abs(dx) < 1e-9) {
+      if (Math.abs(x1 - bl.x) > hx) continue;
+    } else {
+      let a = (bl.x - hx - x1) / dx, b = (bl.x + hx - x1) / dx;
+      if (a > b) { const q = a; a = b; b = q; }
+      if (a > t0) t0 = a;
+      if (b < t1) t1 = b;
+      if (t0 > t1) continue;
+    }
+    if (Math.abs(dz) < 1e-9) {
+      if (Math.abs(z1 - bl.z) > hz) continue;
+    } else {
+      let a = (bl.z - hz - z1) / dz, b = (bl.z + hz - z1) / dz;
+      if (a > b) { const q = a; a = b; b = q; }
+      if (a > t0) t0 = a;
+      if (b < t1) t1 = b;
+      if (t0 > t1) continue;
+    }
+    return false; // a reta atravessa este prédio: sem visão
+  }
+  return true;
+}
+/* LOS do CARRO: 3 linhas paralelas (centro + ±3,4 lateral) com margem apertada
+   — cobre a carroceria inteira sem cegar o caçador que dirige rente à parede.
+   Só ela libera investida: cantos e corredores estreitos agora bloqueiam. */
+function losCar(x1, z1, x2, z2) {
+  const dx = x2 - x1, dz = z2 - z1;
+  const L = Math.hypot(dx, dz) || 1;
+  const ox = (dz / L) * 3.4, oz = (-dx / L) * 3.4;
+  return losClear(x1, z1, x2, z2, 1.5)
+    && losClear(x1 + ox, z1 + oz, x2 + ox, z2 + oz, 1.5)
+    && losClear(x1 - ox, z1 - oz, x2 - ox, z2 - oz, 1.5);
+}
+/* desvio local por "bigodes" (sonda à frente + dois lados) — compartilhado
+   entre SEGV e rivais; custo fixo, sem raycast por frame */
+function avoidBuildings(o, dt, look, r) {
   for (const s of [1, 0.6, 0.3]) {
-    const ax = b.x + Math.sin(b.moveH) * look * s;
-    const az = b.z + Math.cos(b.moveH) * look * s;
+    const ax = o.x + Math.sin(o.moveH) * look * s;
+    const az = o.z + Math.cos(o.moveH) * look * s;
     if (circleHitsBuilding(ax, az, r)) {
-      // escolhe o lado com mais espaco: testa pontos a 60 graus dos dois lados
-      const base = Math.atan2(ax - b.x, az - b.z);
-      const dl = circleHitsBuilding(b.x + Math.sin(base - 0.9) * look, b.z + Math.cos(base - 0.9) * look, r);
-      const dr = circleHitsBuilding(b.x + Math.sin(base + 0.9) * look, b.z + Math.cos(base + 0.9) * look, r);
-      const side = dl && !dr ? 1 : dr && !dl ? -1 : (b.avoidSide || (rand() < 0.5 ? -1 : 1));
-      b.avoidSide = side;
-      b.heading = turnToward(b.heading, base + side * 0.95, 2.4, dt);
+      // escolhe o lado com mais espaco: testa pontos a 54 graus dos dois lados
+      const base = Math.atan2(ax - o.x, az - o.z);
+      const dl = circleHitsBuilding(o.x + Math.sin(base - 0.9) * look, o.z + Math.cos(base - 0.9) * look, r);
+      const dr = circleHitsBuilding(o.x + Math.sin(base + 0.9) * look, o.z + Math.cos(base + 0.9) * look, r);
+      const side = dl && !dr ? 1 : dr && !dl ? -1 : (o.avoidSide || (rand() < 0.5 ? -1 : 1));
+      o.avoidSide = side;
+      o.heading = turnToward(o.heading, base + side * 0.95, 2.4, dt);
       return true;
     }
   }
   return false;
 }
+function bossAvoid(b, dt, r = 4.5) {
+  return avoidBuildings(b, dt, 8 + b.speed * 0.5, r);
+}
+/* telemetria de IA (debug via __rr.aiLog): lançamentos/abortes/crashes da
+   investida do SEGV com a LOS do momento — diagnóstico do "bate em prédio" */
+const AILog = { charge: [], abort: [], crash: [], trace: [], path: [], st: null, losN: 0, losY: 0, streakN: 0, streakD: 0 };
 let boss = null;
 let bossMesh = null;
 let playerHp = 3;
@@ -2896,7 +3132,7 @@ if (!bossMesh) {
 function makeBossMesh() {
   const group = new THREE.Group();
   const body = new THREE.Mesh(new RoundedBoxGeometry(4.6, 2.6, 9, 3, 0.3),
-    new THREE.MeshStandardMaterial({ color: 0x16070a, roughness: 0.5, metalness: 0.5 }));
+    new THREE.MeshStandardMaterial({ color: 0x16070a, roughness: 0.5, metalness: 0.5, envMapIntensity: 0.65 }));
   body.position.y = 1.9;
   body.castShadow = true;
   group.add(body);
@@ -2910,7 +3146,7 @@ function makeBossMesh() {
   spike.rotation.x = Math.PI / 2;
   spike.position.set(0, 1.7, 5.6);
   group.add(spike);
-  const stripeMat = new THREE.MeshStandardMaterial({ color: 0x2a0006, emissive: 0xff1733, emissiveIntensity: 2.4, toneMapped: false });
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0x2a0006, emissive: 0xff3333, emissiveIntensity: 3.5, toneMapped: false, metalness: 0.3 });
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(4.7, 0.25, 8.6), stripeMat);
   stripe.position.y = 3.25;
   group.add(stripe);
@@ -2968,7 +3204,7 @@ const BRAIN_KEY = 'francos-repo-racer-brain';
 const BRAIN_SYS = 'Você é a IA de um jogo de corrida no navegador. Responda APENAS com JSON válido, sem ``` e sem texto fora do JSON, sem raciocínio.';
 const brain = {
   enabled: false, sel: 0, engine: null, engineModel: '', loading: false, progress: 0,
-  busy: false, reqs: 0, ok: 0, fallback: 0, lastMs: 0, lastErr: '', lastRaw: '',
+  busy: false, reqs: 0, ok: 0, fallback: 0, applied: 0, lastMs: 0, lastErr: '', lastRaw: '',
   lastPrompt: '', lastMotivo: '', lastToastT: -1e9, nextAt: 0, enemyAt: 0, candN: 0,
 };
 function brainModel() { return BRAIN_MODELS[brain.sel]; }
@@ -2991,7 +3227,7 @@ function brainPaint() {
     st.classList.toggle('on', !!(brain.engine && brain.enabled));
     st.classList.toggle('err', !!brain.lastErr && brain.enabled);
     st.textContent = brain.loading ? 'preparando ' + m.nome + ' na GPU… ' + Math.round(brain.progress * 100) + '%'
-      : brain.engine && brain.enabled ? 'ativo: ' + m.nome + ' — decisões no LLM: ' + brain.ok + '/' + brain.reqs + ' (o resto cai na heurística)'
+      : brain.engine && brain.enabled ? 'ativo: ' + m.nome + ' — decisões no LLM: ' + brain.ok + '/' + brain.reqs + ' · aplicadas: ' + brain.applied + ' (o resto cai na heurística)'
       : brain.enabled ? 'clique no botão para baixar ' + m.nome + ' (uma vez, fica no cache do navegador)'
       : 'LLM local opcional — roda 100% no navegador (WebGPU), sem servidor e sem API. Os pesos baixam uma vez e ficam no cache.';
   }
@@ -3130,6 +3366,8 @@ function brainApplyToast(quem, motivo) {
   }
 }
 function brainApplyBoss(b, key, motivo) {
+  b.thinkT = 0; // pensou o suficiente: FSM retoma o comando
+  brain.applied++;
   const st = bossStats();
   if (key === 'carga') {
     b.mode = 'telegraph'; b.modeT = st.telegraphT * (b.rage ? 0.72 : 1);
@@ -3148,6 +3386,8 @@ function brainApplyBoss(b, key, motivo) {
   brainApplyToast('SEGV', motivo);
 }
 function brainApplyEnemy(e, key, motivo) {
+  e.thinkT = 0; // pensou o suficiente: FSM retoma o comando
+  brain.applied++;
   if (key === 'carga') { e.mode = 'telegraph'; e.modeT = 0.8; tone(660, 0.1, { gain: 0.05 }); }
   else if (key === 'esq') { e.dir = -1; e.flank += 1.2; e.modeT = Math.max(e.modeT, 1.4); }
   else if (key === 'dir') { e.dir = 1; e.flank += 1.2; e.modeT = Math.max(e.modeT, 1.4); }
@@ -3165,6 +3405,7 @@ function brainTryDecideBoss(b) {
   const fallbackIdx = cands.reduce((bi, c, i) => (c.score > cands[bi].score ? i : bi), 0);
   brain.candN = cands.length;
   brain.nextAt = performance.now() + 2500; // cadência: não pergunta a cada quadro
+  b.thinkT = 1.9; // o SEGV espera até 1,9 s pela decisão (depois segue a heurística)
   brainAsk(brainPrompt('SEGV, o chefe caçador', estado, cands)).then((esc) => {
     if (!b.alive) return;
     const idx = esc ? esc.idx : fallbackIdx;
@@ -3193,6 +3434,7 @@ function brainTryDecideEnemy(e) {
   const fallbackIdx = cands.reduce((bi, c, i) => (c.score > cands[bi].score ? i : bi), 0);
   brain.candN = cands.length;
   brain.enemyAt = performance.now() + 4000;
+  e.thinkT = 1.9; // o líder espera até 1,9 s pela decisão (depois segue a heurística)
   brainAsk(brainPrompt('o líder dos rivais', estado, cands)).then((esc) => {
     if (!e.alive) return;
     const idx = esc ? esc.idx : fallbackIdx;
@@ -3277,7 +3519,7 @@ function startBoss() {
     heading: Math.atan2(car.position.x - sx, car.position.z - sz),
     speed: 0, hp: st2.hp, maxHp: st2.hp, mode: 'stalk', modeT: 4,
     flashT: 0, alive: true, lean: 0, moveH: 0, avoidSide: 0, feint: 0, cutT: 0, cutX: 0, cutZ: 0,
-    rage: 0, wp: null, wpT: 0, stuckT: 0, trailT: 0, smokeT: 0
+    rage: 0, wp: null, wpT: 0, stuckT: 0, trailT: 0, smokeT: 0, thinkT: 0, losStreak: 0
   };
   boss.moveH = boss.heading;
   bossMesh.group.visible = true;
@@ -3392,37 +3634,80 @@ function updateBoss(dt) {
   const pvx = Math.sin(state.moveH) * cSpd, pvz = Math.cos(state.moveH) * cSpd;
   const lead = clamp(dist / Math.max(14, st.stalk), 0, 2);
   const want = Math.atan2(dx + pvx * lead, dz + pvz * lead);
+  /* IA SEM CEGUEIRA: o SEGV só investe com linha de visão do CARRO limpa (3
+     linhas); sem visão ele persegue pela grade de ruas até enxergar — acabou o
+     "carrega pra dentro do prédio". ~0,1 ms por frame. */
+  const losNow = losCar(b.x, b.z, car.position.x, car.position.z);
+  AILog.losN++;
+  if (losNow) AILog.losY++;
+  /* LOS ESTÁVEL: visão piscando por fresta de prédio não arma investida —
+     exige 0,3 s contínuos de visão (o retry de 0,9 s perdia toda janela) */
+  b.losStreak = losNow ? (b.losStreak || 0) + dt : 0;
+  if (b.losStreak > 0.3) { AILog.streakN++; if (dist < 90) AILog.streakD++; }
   let target = 0;
   b.modeT -= dt;
   if (b.mode === 'stalk') {
-    target = st.stalk;
+    /* banda elástica: quem foge longe demais é alcançado (24 → até 36 u/s no
+       médio) — antes ele perdia 10 u/s pra sempre em linha reta e nunca pegava */
+    target = st.stalk * (1 + clamp((dist - 25) / 75, 0, 1) * 0.5);
     b.cutT = Math.max(0, (b.cutT || 0) - dt);
     /* C1: rota pela grade de ruas (recalculada a cada 1,4s) — o SEGV não atolma
        mais nos quarteiroes: ele vai de esquina em esquina cortando pelo asfalto */
     b.wpT = (b.wpT || 0) - dt;
-    if (b.wpT <= 0) { b.wpT = 1.4; b.wp = streetPathTo(b.x, b.z, car.position.x, car.position.z); }
+    if (b.wpT <= 0) {
+      b.wpT = 1.4;
+      b.wp = streetPathTo(b.x, b.z, car.position.x + pvx * lead, car.position.z + pvz * lead);
+    }
     const wp = wpNext(b);
-    if (b.cutT > 0) {
+    let br = 2;
+    if (b.cutT > 0 && losClear(b.x, b.z, b.cutX, b.cutZ)) {
       // CORTE DE CAMINHO (tática do cerebro): mira o ponto onde voce VAI estar
       const cw = Math.atan2(b.cutX - b.x, b.cutZ - b.z);
       if (!bossAvoid(b, dt)) b.heading = turnToward(b.heading, cw, 2.2, dt);
       target = st.stalk * 1.12;
-    } else if (wp && dist > 26 && !bossAvoid(b, dt)) {
-      // longe: segue a rua ate a esquina certa
-      b.heading = turnToward(b.heading, Math.atan2(wp[0] - b.x, wp[1] - b.z), 1.9, dt);
-    } else if (!bossAvoid(b, dt)) {
-      b.heading = turnToward(b.heading, want, 1.5, dt);
+      br = 0;
+    } else {
+      if (b.cutT > 0) b.cutT = 0; // ponto de corte ficou atrás de prédio: descarta
+      if (wp && (dist > 26 || !losNow) && !bossAvoid(b, dt)) {
+        // longe OU sem visão: rua mais próxima se dentro do quarteirão,
+        // senão segue a rota até a esquina certa
+        const sh = streetHeading(b);
+        b.heading = turnToward(b.heading, sh !== null ? sh : Math.atan2(wp[0] - b.x, wp[1] - b.z), 1.9, dt);
+        br = 1;
+      } else if (!bossAvoid(b, dt)) {
+        b.heading = turnToward(b.heading, want, 1.5, dt);
+      }
     }
+    // traço do caminho (1 Hz): onde ele está, rumo e para onde aponta
+    b.pathT = (b.pathT || 0) - dt;
+    if (b.pathT <= 0) {
+      b.pathT = 1;
+      AILog.path.push({
+        x: +b.x.toFixed(0), z: +b.z.toFixed(0), d: +dist.toFixed(0), br,
+        wp: wp ? 1 : 0, spd: +b.speed.toFixed(1), hd: +b.heading.toFixed(2),
+      });
+      if (AILog.path.length > 90) AILog.path.shift();
+    }
+    /* visão estável e perto: adianta o telegraph (não espera o timer) */
+    if (b.modeT > 0.5 && b.losStreak > 0.3 && dist < 90) b.modeT = 0.5;
     if (b.modeT <= 0) {
       if (b.feint === 3) {
         // FINTA concluida (recuou um toque): agora volta pra valer
         b.feint = 0;
-        b.mode = 'charge'; b.modeT = 1.7; b.heading = Math.atan2(dx, dz);
+        b.mode = 'charge'; b.modeT = dist < 25 ? 2.4 : 1.7; b.heading = Math.atan2(dx, dz);
         tone(220, 0.5, { type: 'sawtooth', gain: 0.08, freqEnd: 660 });
+      } else if (b.thinkT > 0) {
+        b.thinkT -= dt; // decisão do LLM em voo: segue caçando pela rua enquanto pensa
       } else if (!brainTryDecideBoss(b)) {
-        b.mode = 'telegraph'; b.modeT = st.telegraphT * (b.rage ? 0.72 : 1);
-        tone(880, 0.12, { gain: 0.07 });
-        tone(880, 0.12, { gain: 0.07, delay: 0.22 });
+        if ((b.losStreak > 0.3 && dist < 90) || dist < 12) {
+          b.mode = 'telegraph'; b.modeT = st.telegraphT * (b.rage ? 0.72 : 1);
+          tone(880, 0.12, { gain: 0.07 });
+          tone(880, 0.12, { gain: 0.07, delay: 0.22 });
+        } else {
+          AILog.st = AILog.st || { tr: 0, los: 0, near: 0 };
+          AILog.st.tr++; if (losNow && dist < 90) AILog.st.los++; if (dist < 12) AILog.st.near++;
+          b.modeT = 0.9; // longe demais ou sem visão: fecha a distância caçando
+        }
       }
     }
   } else if (b.mode === 'telegraph') {
@@ -3434,22 +3719,63 @@ function updateBoss(dt) {
         b.feint = 3;
         b.mode = 'stalk'; b.modeT = 0.75;
         tone(620, 0.09, { gain: 0.05 });
-      } else {
-        b.mode = 'charge'; b.modeT = 1.7;
+      } else if (dist > 105) {
+        b.mode = 'stalk'; b.modeT = 1.0; // alvo escapou longe: volta pra caça
+      } else if (b.losStreak > 0.3 && dist < 90 && !circleHitsBuilding(b.x, b.z, 7.5)) {
+        b.mode = 'charge'; b.modeT = dist < 25 ? 2.4 : 1.7;
         b.heading = Math.atan2(dx, dz); // a investida trava no ponto REAL de voce
+        b.moveH = b.heading; // sai reto da linha de visão (sem curva de canto)
+        AILog.charge.push({
+          t: +(performance.now() / 1000).toFixed(2), d: +dist.toFixed(1),
+          losLead: +losCar(b.x, b.z, car.position.x + pvx * 0.6, car.position.z + pvz * 0.6),
+          x: +b.x.toFixed(1), z: +b.z.toFixed(1),
+        });
         tone(220, 0.5, { type: 'sawtooth', gain: 0.08, freqEnd: 660 });
+      } else {
+        b.modeT = 0.9; // perdeu visão/ficou longe na hora H: reavalia
       }
     }
   } else if (b.mode === 'charge') {
     target = st.charge * (b.rage ? 1.08 : 1); // C3: furioso investe +8%
     b.trailT = (b.trailT || 0) - dt;
     if (b.trailT <= 0) { b.trailT = 0.07; spawnSparks(b.x - Math.sin(b.moveH) * 4.5, b.z - Math.cos(b.moveH) * 4.5, 2); } // E3: rastro de faíscas
-    if (b.modeT <= 0) { b.mode = 'recover'; b.modeT = 2.2; }
-    else if (dist < 12) {
+    const look = 8 + b.speed * 0.6; // alcance da "prova de rota": freio + folga
+    // traço da investida (4 Hz): linha de MOVIMENTO vs linha do jogador
+    b.traceT = (b.traceT || 0) - dt;
+    if (b.traceT <= 0) {
+      b.traceT = 0.25;
+      AILog.trace.push({
+        t: +(performance.now() / 1000).toFixed(2), d: +dist.toFixed(1), spd: +b.speed.toFixed(1),
+        los: +losNow, mhRay: +losClear(b.x, b.z, b.x + Math.sin(b.moveH) * look, b.z + Math.cos(b.moveH) * look, 3.4),
+        hd: +b.heading.toFixed(2), mh: +b.moveH.toFixed(2), x: +b.x.toFixed(1), z: +b.z.toFixed(1),
+      });
+      if (AILog.trace.length > 600) AILog.trace.shift();
+    }
+    if (b.modeT <= 0) { b.mode = 'recover'; b.modeT = 1.7; }
+    else if (!losNow) {
+      /* perdeu o alvo no meio da carga (escondeu atrás do quarteirão): FREIA
+         em vez de atravessar a parede — era aqui que nascia o CRASH NO MURO */
+      b.mode = 'recover'; b.modeT = 1.1;
+      AILog.abort.push({ t: +(performance.now() / 1000).toFixed(2), d: +dist.toFixed(1), sp: +b.speed.toFixed(1) });
+      spawnSparks(b.x + Math.sin(b.moveH) * 4, b.z + Math.cos(b.moveH) * 4, 3);
+      tone(170, 0.22, { type: 'sawtooth', gain: 0.06, freqEnd: 80 });
+    } else if (!losClear(b.x, b.z, b.x + Math.sin(b.moveH) * look, b.z + Math.cos(b.moveH) * look, 3.8)) {
+      /* a LINHA DO JOGADOR está limpa mas a rota do carro (moveH) bate em
+         parede: freia seco no lugar — era o crash de canto com LOS "true" */
+      b.mode = 'recover'; b.modeT = 1.1;
+      b.speed = Math.min(b.speed, 14);
+      AILog.abort.push({ t: +(performance.now() / 1000).toFixed(2), d: +dist.toFixed(1), sp: +b.speed.toFixed(1), k: 'raio' });
+      spawnSparks(b.x + Math.sin(b.moveH) * 4, b.z + Math.cos(b.moveH) * 4, 3);
+      tone(190, 0.2, { type: 'sawtooth', gain: 0.06, freqEnd: 90 });
+    } else if (dist < 12) {
       // perto demais: curva fechada para tentar acertar — e derrapa
-      b.heading = turnToward(b.heading, Math.atan2(dx, dz), 1.1, dt);
-    } else if (!bossAvoid(b, dt)) {
-      b.heading = turnToward(b.heading, Math.atan2(dx + pvx * 0.6, dz + pvz * 0.6), 0.9, dt);
+      if (!bossAvoid(b, dt, 6.2)) b.heading = turnToward(b.heading, Math.atan2(dx, dz), 1.1, dt);
+    } else if (!bossAvoid(b, dt, 6.2)) {
+      /* mira o ponto ANTECIPADO só se ELE também estiver sem prédio — antes a
+         LOS era checada só no jogador e a investida cortava o canto do quarteirão */
+      const lax = car.position.x + pvx * 0.6, laz = car.position.z + pvz * 0.6;
+      const aim = losCar(b.x, b.z, lax, laz);
+      b.heading = turnToward(b.heading, Math.atan2(aim ? lax : dx + b.x, aim ? laz : dz + b.z), 0.9, dt);
     }
   } else {
     target = 0;
@@ -3485,12 +3811,29 @@ function updateBoss(dt) {
         b.heading += (Math.sin(b.moveH) >= 0 ? -1 : 1) * Math.sign(px || 1) * Math.min(0.55, 0.16 + oz * 0.4);
       }
       b.speed *= 0.7; // raspão perde menos (era 0.25 = parada seca)
+      /* escape de canto: vira para o lado LIVRE (tangente ao prédio) e
+         sincroniza moveH — antes ele relançava a carga encostado na parede
+         e re-crashava no mesmo ponto 3× seguidas */
+      const aw = Math.atan2(-(bl.x - b.x), -(bl.z - b.z));
+      const t1 = aw + Math.PI / 2, t2 = aw - Math.PI / 2;
+      const d1 = Math.sin(b.moveH) * Math.sin(t1) + Math.cos(b.moveH) * Math.cos(t1);
+      b.heading = d1 >= 0 ? t1 : t2;
+      b.moveH = b.heading;
       if (b.mode === 'charge') {
         b.mode = 'recover';
-        b.modeT = 2.4;
-        damageBoss(15);
-        shake = 1;
-        toast('CRASH NO MURO!  -15');
+        b.modeT = 1.8;
+        AILog.crash.push({
+          t: +(performance.now() / 1000).toFixed(2), d: +dist.toFixed(1),
+          los: +losCar(b.x, b.z, car.position.x, car.position.z),
+          sp: +b.speed.toFixed(1), x: +b.x.toFixed(1), z: +b.z.toFixed(1),
+        });
+        /* raspão a baixa velocidade (encostou parado / lançou grudado no muro)
+           só solta o carro — -15 só quando veio de verdade da investida */
+        if (b.speed > 10) {
+          damageBoss(15);
+          shake = 1;
+          toast('CRASH NO MURO!  -15');
+        }
       }
       break;
     }
@@ -4002,7 +4345,7 @@ function drawMinimap() {
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LOW_END ? 0.6 : 0.72, 0.55, 0.78);
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LOW_END ? 0.6 : 0.85, LOW_END ? 0.48 : 0.65, LOW_END ? 0.7 : 0.9);
 composer.addPass(bloom);
 // vinheta + aberracao cromatica sutil + leve saturacao: acabamento synthwave
 // barato (1 quad, 5 samples) — em LOW_END vira so vinheta
@@ -5002,6 +5345,8 @@ if (params.has('debug')) {
     damageBoss,
     hurtPlayer: () => hurtPlayer(true),
     getBoss: () => boss,
+    aiLog: AILog,
+    losClear: (x1, z1, x2, z2) => losClear(x1, z1, x2, z2),
     bossEnd,
     setCar: (x, z, h, s) => {
       cancelLoopRide();
@@ -5036,6 +5381,9 @@ if (params.has('debug')) {
       camUp: [Number(camera.up.y.toFixed(3)), Number(camera.up.z.toFixed(3))]
     }),
     groundAt: (x, z) => groundHeightAt(x, z),
+    camPos: () => { const d = camera.getWorldDirection(new THREE.Vector3()); return [camera.position.x, camera.position.y, camera.position.z, +d.x.toFixed(3), +d.y.toFixed(3), +d.z.toFixed(3)]; },
+    setCam: (x, y, z, tx, ty, tz) => { camera.position.set(x, y, z); camera.lookAt(tx, ty, tz); return true; },
+    render1: () => { present(FIXED_DT); composer.render(); return true; },
     setAir: (x, z, y, heading, speed) => {
       car.position.x = x; car.position.z = z;
       state.y = y; state.vy = 0; state.airborne = true;
@@ -5094,6 +5442,7 @@ if (params.has('debug')) {
       status: () => ({
         enabled: brain.enabled, loading: brain.loading, progress: brain.progress,
         model: brain.engineModel, reqs: brain.reqs, ok: brain.ok, fallback: brain.fallback,
+        applied: brain.applied,
         lastErr: brain.lastErr, lastMs: brain.lastMs, lastRaw: brain.lastRaw,
         lastMotivo: brain.lastMotivo, busy: brain.busy, gpu: !!navigator.gpu,
       }),

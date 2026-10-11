@@ -10,7 +10,8 @@ git clone https://github.com/FrancosCorporation/repo-racer.git
 cd repo-racer
 python3 -m http.server 8080   # abra http://localhost:8080
 ```
-Também funciona abrindo o arquivo direto: `open index.html`.
+Use um servidor local em vez de abrir `index.html` por `file://`: o jogo usa
+JavaScript modules e importa bibliotecas de outros domínios.
 
 ### Com Docker (opcional, só para servir o estático em nginx)
 ```bash
@@ -18,7 +19,8 @@ docker compose up --build     # abra http://localhost:8080
 ```
 Sem compose, com a imagem oficial na mão:
 ```bash
-docker run --rm -p 8080:80 -v "$PWD":/usr/share/nginx/html:ro nginx:alpine
+docker build -t repo-racer:local .
+docker run --rm -p 8080:80 repo-racer:local
 ```
 
 > Docker aqui é **apenas um servidor web** para os arquivos estáticos
@@ -75,7 +77,9 @@ aquecimento, circuito de portais, zona de drift, caçada, o laço infinito e o c
   e flanqueiam) e **separação** (a matilha não empilha); o SEGV ganhou **fase
   furiosa** abaixo de 50% de vida (olho âmbar, telegrafa mais rápido, carga +8%)
   e **pune quem fica parado**; colisão com **deslize + unstick** — acabou o
-  "travando" do chefão
+  "travando" do chefão. Investidas só disparam com **linha de visão de 3 raios**
+  estável (0,3 s) + freio de rota: validado **0 auto-crashes** em fuga e
+  esconderijo (antes: 6), e a matilha fecha a distância sem patinar
 - **Leitura visual de intenção** — o rival exibe **"!"** antes do bote, giroflex
   girando e fumaça quando está de um hit; o SEGV solta **faíscas na carga** e
   **fumaça** quando vai pro chão; o trânsito tem **lanternas de freio de verdade**
@@ -277,13 +281,25 @@ python3 -m http.server 8080
 
 ```
 index.html            # o jogo inteiro (cena, física arcade, áudio, HUD, controles)
-MELHORIAS-LOOPING.md  # verificação do looping: diagnóstico, correções, validação
-MELHORIAS-3D-E-IA.md  # verificação de 3D/IA: rivais, SEGV, cérebro LLM local + testes
 preview.png           # screenshot usado no README
-Dockerfile            # nginx:alpine servindo os estáticos (sem build de app)
+Dockerfile            # nginx com versão fixa servindo somente os arquivos necessários
 docker-compose.yml    # atalho: docker compose up --build na porta 8080
 docker/nginx.conf     # config do nginx do container
+SECURITY.md           # escopo e canal de reporte de vulnerabilidades
 ```
+
+## Documentos e diretrizes
+
+| Documento | Uso |
+| --- | --- |
+| [MELHORIAS.md](MELHORIAS.md) | Consolidação de segurança, operação e itens transversais do repositório. |
+| [PLANO-DE-MELHORIAS.md](PLANO-DE-MELHORIAS.md) | Estado atual e próximo trabalho pendente. |
+| [MELHORIAS-LOOPING.md](MELHORIAS-LOOPING.md) | Histórico e validação da pista de looping. |
+| [MELHORIAS-3D-E-IA.md](MELHORIAS-3D-E-IA.md) | Histórico de 3D, comportamento das IAs e WebLLM. |
+| [SECURITY.md](SECURITY.md) | Política de segurança e reporte privado. |
+
+Os dois documentos `MELHORIAS-*` são registros históricos de trabalho concluído;
+use `PLANO-DE-MELHORIAS.md` e `MELHORIAS.md` para o estado operacional atual.
 
 ## Licença
 
