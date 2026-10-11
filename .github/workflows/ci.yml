@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check embedded module syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          html = Path("index.html").read_text(encoding="utf-8")
+          modules = re.findall(r"<script type=\"module\">\s*(.*?)\s*</script>", html, re.S)
+          if len(modules) != 1:
+              raise SystemExit(f"expected one module script, found {len(modules)}")
+          Path("/tmp/repo-racer.mjs").write_text(modules[0], encoding="utf-8")
+          PY
+          node --check /tmp/repo-racer.mjs
+      - name: Build nginx image
+        run: docker build --tag repo-racer:ci .
