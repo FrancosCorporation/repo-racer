@@ -8,7 +8,7 @@ Não existe etapa de build: o jogo inteiro é o `index.html` (Three.js vem por C
 ```bash
 git clone https://github.com/FrancosCorporation/repo-racer.git
 cd repo-racer
-python3 -m http.server 8080   # abra http://localhost:8080
+python3 -m http.server --bind 127.0.0.1 8080   # abra http://localhost:8080
 ```
 Use um servidor local em vez de abrir `index.html` por `file://`: o jogo usa
 JavaScript modules e importa bibliotecas de outros domínios.
@@ -17,10 +17,12 @@ JavaScript modules e importa bibliotecas de outros domínios.
 ```bash
 docker compose up --build     # abra http://localhost:8080
 ```
+
+Os comandos locais publicam a porta apenas em `127.0.0.1`. Para disponibilizar o jogo na rede local, altere conscientemente o endereço de bind no comando ou em `docker-compose.yml`.
 Sem compose, com a imagem oficial na mão:
 ```bash
 docker build -t repo-racer:local .
-docker run --rm -p 8080:80 repo-racer:local
+docker run --rm -p 127.0.0.1:8080:80 repo-racer:local
 ```
 
 > Docker aqui é **apenas um servidor web** para os arquivos estáticos
@@ -273,7 +275,7 @@ https://francoscorporation.github.io/repo-racer/
 ## Rodar localmente
 
 ```bash
-python3 -m http.server 8080
+python3 -m http.server --bind 127.0.0.1 8080
 # abra http://localhost:8080
 ```
 

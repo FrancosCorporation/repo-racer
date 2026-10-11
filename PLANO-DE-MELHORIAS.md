@@ -23,6 +23,7 @@
 - [x] Servidor estático retorna 404 para caminhos inexistentes e serve `/LICENSE` como texto.
 - [x] Cabeçalhos de segurança e política CSP alinhada aos imports CDN, WebGPU/WASM, workers e downloads dos pesos do modelo.
 - [x] Imagem Nginx com versão fixada, sem preview/default `50x.html`, e Compose com rootfs somente leitura, capabilities mínimas e healthcheck.
+- [x] Servidor Python local e porta do Compose limitados a `127.0.0.1` por padrão; README explica como expor conscientemente na rede.
 - [x] CI para sintaxe do módulo embutido e build da imagem Docker.
 - [x] `.gitignore`, `SECURITY.md` e índice de documentação.
 

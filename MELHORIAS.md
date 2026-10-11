@@ -9,7 +9,8 @@
 
 > **Estado em 11/10/2026:** SRI no import map, Nginx estrito, Docker/Compose endurecidos, workflow de CI,
 > `.gitignore`, `SECURITY.md` e índice dos documentos foram implementados. Falta aceite em navegador/container
-> e publicar/executar o workflow. A rodada também preserva melhorias de jogo em andamento descritas no README.
+> e publicar/executar o workflow. Comandos locais e porta publicada no Compose usam bind em `127.0.0.1`.
+> A rodada também preserva melhorias de jogo em andamento descritas no README.
 
 ---
 
