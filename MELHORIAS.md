@@ -446,7 +446,7 @@ novo se mistura com o que já estava em andamento.
 
 **Documentação e operação**
 - [x] `DOC-01` — índice dos documentos na raiz
-- [ ] `DOC-02` — checkpoint commitado e working tree limpo
+- [x] `DOC-02` — mudanças consolidadas em `95a1f46`; working tree limpo e sincronizado com `origin/main`
 - [x] `DEVOPS-01` — imagem base pinada por versão/tag (digest ainda não fixado)
 - [x] `DEVOPS-02` — Compose com `read_only`, capabilities reduzidas e `no-new-privileges`
 - [x] `DOC-03` — `SECURITY.md`
